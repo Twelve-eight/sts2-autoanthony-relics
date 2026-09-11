@@ -1,0 +1,6 @@
+{
+  "settings_ui": {
+    "AUTOANTHONYRELICS-Enabled.title": "启用东尼算法",
+    "AUTOANTHONYRELICS-Enabled.desc": "开启后, 每局开始时按东尼算法重采样整副卡池. 关闭则使用引擎原生卡池."
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "AutoAnthonyRelics",
+  "name": "Anthony Algorithm - Relics (东尼算法 - 遗物)",
+  "author": "omp",
+  "description": "A faithful reimplementation of the Anthony algorithm (Auto-Anthonyology): the native card set is split offline into atomic fragments, and each run samples them back together from a single pool, so conditions and effects recombine freely - any legal condition can end up attached to any legal effect. The generation pool data is derived from Alriph's Auto-Anthonyology (mod id AutoAnthony); the generator, interpreter and rendering are an independent reimplementation. Standalone; no AutoAnthony dependency.",
+  "version": "0.1.0",
+  "min_game_version": "0.111.0",
+  "has_pck": true,
+  "has_dll": true,
+  "dependencies": [
+    {
+      "id": "BaseLib",
+      "min_version": "3.4.5"
+    }
+  ],
+  "affects_gameplay": true
+}

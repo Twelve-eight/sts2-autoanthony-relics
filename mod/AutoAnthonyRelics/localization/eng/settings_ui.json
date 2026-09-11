@@ -1,0 +1,6 @@
+{
+  "settings_ui": {
+    "AUTOANTHONYRELICS-Enabled.title": "Enable Anthony Algorithm",
+    "AUTOANTHONYRELICS-Enabled.desc": "When on, the whole card pool is resampled with the Anthony algorithm at the start of each run. When off, the engine's native pool is used."
+  }
+}
