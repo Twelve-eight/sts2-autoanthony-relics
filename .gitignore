@@ -5,3 +5,7 @@ mod/.godot/
 mod/publish/
 *.user
 .tmp/
+
+# Probe / tool build output
+tools/**/bin/
+tools/**/obj/

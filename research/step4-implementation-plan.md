@@ -14,6 +14,8 @@
 | 显示名 | **`东尼算法 - 遗物`** / `Anthony Algorithm - Relics` | 交接文档第 4 步标题 + D1 把旧名腾出来 |
 | 代码来源 | **思想重写, 不移植反编译代码** | `HANDOFF-2026-09-12.md` 0.2 原文: "用户要求**思想重写**一个新 mod" |
 | 数据来源 | **复用原版生成池** (效率优先) | 用户裁定 "向效率看齐" |
+| 数值口径 | **沿用原配方 `BaseValue + Offset`** | 用户裁定 "沿用原配方 BaseValue"; 原版平衡表不在数据里 |
+| 候选权重 | **纯均匀随机** | 用户裁定 "纯均匀随机"; 原版口味权重表省略 |
 | 仓库位置 | **新仓库 `G:/omp works/sts2-autoanthony-relics/`** | 沿用 `sts2-mpconfigsync` / `sts2-perfect` / `sts2-spire1` 的兄弟仓库惯例; 与 Qurious 仓库 (`G:/omp works/AutoAnthonyRelics/`, 根目录保持不动) 区分 |
 
 **署名与衍生声明是硬要求**: 数据复用 Alriph 的离线产出, 必须在 manifest `description`、
@@ -91,20 +93,32 @@ Template 前缀分布: `N` 292 / `T` 179 / `NCR` 91 / `A` 89 / `D` 73 / `R` 60 /
 - **验收**: 隔离探针断言 481 配方 / 931 原子 / 931 spec / 1:1 join / 零孤儿 /
   6 角色分布 / 33 opcode / 306 组合, 数字与 §1 逐项一致。
 
-### 阶段 B - 生成器核心 (条件重组机制本体)
+### 阶段 B - 生成器核心 (条件重组机制本体) —— **已完成**
 
-按契约 §4.1-4.3 实现:
+实现落在 `mod/Code/Generation/`:
 
-- 逐槽采样: 清空候选表 -> 遍历该角色整个原子池 -> `IsCompatible(type, target,
-  cost, hasStarCostX, atom, previous)` 过滤 -> 按稀有度加权随机抽
-  (`PickForRarity`) -> 实例化数值槽 -> `LinkedTriggerIndex` 决定绑定 -> 追加。
-- `AdaptiveEffectCountWindow` 动态槽位数 (常见 2-5 条)。
-- `LinkedTriggerIndex` 的判定顺序照契约 §4.3 的表逐条实现, 含
-  **普通触发 `_random.Next(2) != 0` 即约 50% 绑定**。
-- 确定性: `System.Random(SHA256("{ModId}/v1/all-pools/{character}/{seed}"))`,
-  版本串参与盐值。
+| 文件 | 职责 |
+| --- | --- |
+| `GenerationTypes.cs` | 稀有度/类型/目标枚举 + 全函数解析 + `GeneratedOperation` / `GeneratedCard` / 指纹 + `DeterministicRandom` (自写 splitmix64) + `GenerationSeed` |
+| `GenerationPool.cs` | 每角色派生统计: `ComponentCounts` / `ComponentCountCounts` / `MinimumEffectCountsByRarity` / `AdaptiveEffectCountWindow` / `PickComponentCount` |
+| `GenerationRules.cs` | 全部模板集合与判定谓词 (含 `LinkedTriggerIndex` 用到的 14 条前置条件) |
+| `TriggerBinder.cs` | `LinkedTriggerIndex` 本体 + `BindingStats` 决策计数 |
+| `CompatibilityFilter.cs` | 每槽过滤 (30 条具名规则) + 终槽形状判定 + 装配后校验 |
+| `CardAssembler.cs` | 槽循环、壳选择、装配重试、兜底 |
 
-**验收 (对应 §9 条件 1-5 + 7, 全部可由探针判定, 不需要解释器)**:
+与原版的两处已裁定差异 (见 `research/fidelity-ledger.md`):
+数值沿用 `BaseValue + Offset`; 候选与槽位数纯均匀。
+
+实现过程中查实的原版语义 (按序逐条对齐):
+- 逐槽采样: 清空候选表 -> 遍历该角色整个原子池 -> 兼容性过滤 ->
+  **均匀**抽 -> 实例化数值槽 -> `LinkedTriggerIndex` 决定绑定 -> 追加。
+- `AdaptiveEffectCountWindow`: 最小值先向最大值靠拢, 相遇后两者一起涨, 上限 8。
+  `duplicateFailures` 因未实现验收循环而恒为 0, 窗口恒 `(1,5)`。
+- `RarityEffectCountMinimum` 原版只在 aggressive 模式消费, 默认路径不应用。
+- 确定性: 种子材料 `{ModId}/{Version}/{character}/{seed}`;
+  PRNG 自写 (不用 `System.Random`, 其序列跨 .NET 版本不稳定)。
+
+**验收 (对应 §9 条件 1-5 + 7, 全部由探针判定, 不需要解释器) —— 全部通过**:
 
 1. 条件与效果在数据层是两类独立片段, 且携带 opcode+目标+作用域+数值槽+条件+触发。
 2. 采样从同一池子独立抽条件与效果, 不存在"条件携带原搭档效果"。
@@ -113,6 +127,15 @@ Template 前缀分布: `N` 292 / `T` 179 / `NCR` 91 / `A` 89 / `D` 73 / `R` 60 /
 5. 触发片段自身 (`Scope ∈ {AbilityTrigger, ConditionalTrigger, AbilityRule}`)
    **从未**被绑定到另一个触发 (探针遍历全部种子断言 `triggerIndex == -1`)。
 7. 同 (角色, 种子) 跨进程字节一致; 换版本串结果改变。
+
+实测 (250 种子 × 5 稀有度 × 6 角色 = 7500 张):
+装配成功率 100%; 生成链 1316 条其中 1298 条 (98.6%) 原版不存在;
+硬币绑定率 49.1%; 触发再绑定 0 次 (规则命中 368 次);
+全量摘要 `3735263F…CC73F9C`, 两次独立进程输出逐字节相同。
+
+附带提前验证了契约条件 6 的可达性: Ironclad 扫描 10000 张,
+`owner_hp_lost_during_turn -> lose_hp` 命中 23 次, 并打印了样例卡。
+(阶段 D 仍负责把这件事做成正式验收。)
 
 ### 阶段 C - 解释器 (最大的一块, 按 opcode 分片)
 

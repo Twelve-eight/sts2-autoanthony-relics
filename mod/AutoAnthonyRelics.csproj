@@ -60,6 +60,17 @@
         <EmbeddedResource Remove="images/**" />
     </ItemGroup>
 
+    <!--
+      The isolated probe asserts on the generator's coherence predicates (the
+      "a trigger is never re-bound" rule, the dependency-prefix legality table,
+      ...). Those are internal because the runtime interpreter lives in the same
+      assembly and has no reason to widen them. Exposing them to the probe is
+      cheaper and more honest than duplicating the rule tables in the test.
+    -->
+    <ItemGroup>
+        <InternalsVisibleTo Include="Step4Probe" />
+    </ItemGroup>
+
     <ItemGroup>
         <None Condition="Exists('Directory.Build.props')" Include="Directory.Build.props"/>
         <None Include=".gitignore" />

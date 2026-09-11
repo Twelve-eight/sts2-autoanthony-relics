@@ -104,3 +104,93 @@
 阶段 B (生成器核心): 逐槽采样 + `IsCompatible` 过滤 + `PickForRarity` 加权 +
 数值槽实例化 + `LinkedTriggerIndex` 绑定 (含普通触发约 50% 概率) + SHA256 种子派生。
 验收对应契约 §9 条件 1-5 + 7, 全部可由探针判定, 不需要解释器。
+
+---
+
+## Session 2 - 阶段 B: 生成器核心 (条件重组机制本体)
+
+**方向**: 第 4 步 (新 mod `AutoAnthonyRelics`) / 阶段 B —— 生成器核心。
+
+### 先落两个口径 (用户裁定, 会进卡片指纹)
+
+| 项 | 裁定 | 理由 |
+| --- | --- | --- |
+| 数值槽 | **沿用原配方 `BaseValue + Offset`** | 原版平衡表 (`EffectBalanceModel` 3864 行 / `NumericGenerationTuning` 894 行 / `PercentageValueTuning`) **不在复用的数据里**, 无法推导; 原版本身也有 `OriginalValueChance` 分支沿用原值, 我们取该分支的极限 |
+| 候选权重 | **纯均匀随机** | 原版 `PickForRarity` 的两段式家族加权 + 14 个 `PercentWeight` 修正项全部省略 |
+
+两条都写进卡片指纹 ⇒ 改动等于全仓库重来 (存档 / 联机握手 / 可复现性)。已同步
+`research/step4-implementation-plan.md` §0 与 `research/fidelity-ledger.md` §0。
+
+### 实现 (`mod/Code/Generation/`, 6 个文件)
+
+`GenerationTypes` / `GenerationPool` / `GenerationRules` / `TriggerBinder` /
+`CompatibilityFilter` / `CardAssembler`。职责与逐条对齐情况见
+`research/fidelity-ledger.md` 与计划文档阶段 B 小节。
+
+三处值得单独记的设计决定:
+
+1. **PRNG 自写, 不用 `System.Random`**。后者的序列官方声明跨 .NET 版本不保证稳定,
+   而卡片身份要跨玩家一致。改为 splitmix64 (64 位状态, SHA256 前 8 字节做种子),
+   确定性成为本仓库的性质而非运行时的性质。
+2. **`InternalsVisibleTo("Step4Probe")`**。一致性谓词 (触发不可再绑定、依赖前缀合法性表)
+   是 internal (运行期解释器同程序集, 没有理由公开); 让探针看见比在测试里重抄一遍
+   规则表更诚实, 也更不容易漂移。
+3. **`BindingStats` 决策计数**。契约条件 4 说"普通条件约 50% 绑定"。不计数就只能从
+   卡片输出反推, 那是间接的。现在 `CoinFlipBinds/(CoinFlipBinds+CoinFlipRejects)`
+   就是那个统计量, `TriggerSelfRejects` 同时证明条件 5 的规则真的命中了而非空转。
+
+### 验收 (探针, 全部通过)
+
+`tools/step4-probe/` (已从 `.tmp/` 纳入仓库), 250 种子 × 5 稀有度 × 6 角色 = 7500 张:
+
+| 契约条件 | 实测 |
+| --- | --- |
+| 1 片段携带完整结构化载荷 | 16909 个操作全部有 target; 1213 个带 trigger spec; 30 个带 condition spec |
+| 2 同池独立抽样 | 生成链 1316 条, 其中 **1298 条 (98.6%) 在原版任何卡里都不存在** |
+| 3 绑定是生成期步骤 | `operation[0]` 恒为 -1; 全部 triggerIndex 指向更早的操作且目标是触发/依赖前缀 |
+| 4 普通条件绑定率 ≈50% | **297/605 = 49.1%** (逐角色 42.0%–53.0%) |
+| 5 触发从不被再绑定 | 0 次; 规则实际命中 368 次 (非空转) |
+| 7 确定性 | 同 (角色,种子) 指纹一致; 换版本串/换种子/换角色都改变指纹; 全量摘要两次独立进程**逐字节相同** |
+
+装配成功率 **7500/7500 = 100%**; 槽位数分布 1→2290 / 2→2088 / 3→2045 / 4→1077;
+输出覆盖 33/33 opcode。全量生成摘要 `3735263FE51D63A183BAF6BAEA6B16B7F2A216BA8EB337ED134E144A2CC73F9C`。
+
+附带提前验证契约条件 6 的可达性: Ironclad 扫 10000 张,
+`owner_hp_lost_during_turn -> lose_hp` 命中 23 次。该组合被池子强约束 ——
+该 trigger kind **只存在于 Ironclad** (2 个原子), 且是 `AbilityTrigger` scope,
+而非 Power 壳一律拒收 `AbilityTrigger` ⇒ 只有 Ironclad 的 Power 壳能承载它。
+样例卡已打印 (Corruption 壳, 4 槽)。阶段 D 仍负责做成正式验收。
+
+### 过程中修正的自己的两处错误
+
+1. **`AdaptiveEffectCountWindow` 的语义我一开始理解错了**。我按"每次重复失败窗口
+   上下界各 +1"写了断言, 实测 `(1,5) -> (2,5)`。回去读原版循环:
+   **最小值先向最大值靠拢, 两者相遇后一起涨, 上限 8**。是我的断言错, 不是实现错。
+   已把断言改成覆盖 4 个阶段: `(0)->1..5`、`(3)->2..5`、`(12)->5..5`、
+   `(15)->6..6`、`(60)->8..8`。
+2. **`RarityEffectCountMinimum` 是冷路径**。我原以为它是"槽位数下限"。核实原版:
+   它只在 `raiseAggressiveEffectFloor` 为真时被消费, 而该标志默认 (`balancedValues
+   = true`) 为假 ⇒ **默认路径从不应用稀有度下限**。仍然计算它 (它是
+   `ImmutableComponentCatalog` 派生集的一部分, 探针在断言), 但不拿它当闸门。
+   同段还有第二个陷阱: `duplicateFailures` 来自**卡牌验收去重循环**, 而我们没实现
+   那个循环 ⇒ 该参数恒为 0, 窗口恒 `(1,5)`。将来实现验收循环时两处会同时活过来。
+
+### 探针里刻意保留的两个"不完美"
+
+- 通用扫描 (每角色 250 种子) 里 `owner_hp_lost_during_turn -> lose_hp` 命中 0 次。
+  这不是缺陷而是概率: 该组合需要 (Ironclad × Power 壳 × 触发落在非末槽 × 下一槽抽中
+  8 个 `N:HP-` 之一), 期望约 0.3 次 / 300 张。所以 B.10 改成**定向扫描**并把期望值
+  写在注释里, 而不是放宽断言掩盖它。
+- `difficult` (规则 13) 在 7500 张里一次都没触发。原因是规则 5 先接管了"触发后紧跟
+  的效果", 规则 13 只在同一难触发被绑定**第二个**效果时生效。冷路径, 非缺陷。
+
+### 构建与状态
+
+`0 警告 / 0 错误` + `PCK packed`。构建全程 `-p:CopyToModsFolderOnBuild=false`,
+未触碰实机 `mods/`。
+
+### 下一步
+
+阶段 C (解释器)。建议按计划的分片顺序, 先做片 1 (`deal_damage` / `gain_block` /
+`apply_power` / `draw_cards` / `gain_energy` / `gain_stars` / `lose_hp`) 与片 2
+(`trigger` + `condition`), 因为做完这两片就能做阶段 D (契约条件 6 的正式验收)。

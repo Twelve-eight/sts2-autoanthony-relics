@@ -1,0 +1,238 @@
+=== embedded resources ===
+  AutoAnthonyRelics.Code.Data.Json.catalog_recipes.json  (512500 bytes)
+  AutoAnthonyRelics.Code.Data.Json.catalog_runtime_specs.json  (618101 bytes)
+
+=== load + validate ===
+  validation.Ok = True
+
+=== totals ===
+  OK   recipes: 481
+  OK   fragments: 931
+  OK   specs: 931
+
+=== recipes by character ===
+  OK   Silent: 86
+  OK   Defect: 86
+  OK   Necrobinder: 86
+  OK   Regent: 86
+  OK   Ironclad: 85
+  OK   Colorless: 52
+
+=== fragments by scope ===
+  OK   NonTargeted: 426
+  OK   SingleEnemyOnly: 205
+  OK   Independent: 84
+  OK   AbilityTrigger: 77
+  OK   Modifier: 60
+  OK   ConditionalTrigger: 58
+  OK   AbilityRule: 21
+  OK   no Unknown scope: 0
+
+=== fragments by opcode ===
+  OK   DealDamage: 174
+  OK   TemplateSelfAction: 130
+  OK   Trigger: 116
+  OK   GainBlock: 78
+  OK   ApplyPower: 76
+  OK   TemplateIndependentAction: 72
+  OK   DrawCards: 50
+  OK   TemplateModifier: 46
+  OK   TemplateTargetAction: 33
+  OK   GainEnergy: 30
+  OK   Condition: 23
+  OK   CombatRule: 21
+  OK   GainStars: 13
+  OK   LoseHp: 11
+  OK   ExhaustCard: 11
+  OK   DiscardCard: 8
+  OK   CreateCard: 7
+  OK   MoveCard: 5
+  OK   ModifyDamage: 4
+  OK   ModifyCost: 4
+  OK   CreateCopy: 3
+  OK   ModifyHits: 3
+  OK   ChooseGeneratedCard: 3
+  OK   UpgradeCard: 1
+  OK   ModifyBlock: 1
+  OK   GainMaxHp: 1
+  OK   Heal: 1
+  OK   ModifyOrbSlots: 1
+  OK   DrawAndDiscard: 1
+  OK   ModifyPower: 1
+  OK   ModifyX: 1
+  OK   EndTurn: 1
+  OK   RestrictBlockFromCards: 1
+  OK   distinct opcodes present: 33
+  OK   no Unknown opcode: 0
+
+=== dimension cardinalities ===
+  OK   distinct variants: 291
+  OK   distinct opcode/variant pairs: 306
+  OK   distinct flags: 86
+  OK   distinct condition kinds: 18
+  OK   distinct condition specs: 18
+  OK   distinct trigger kinds: 55
+  OK   distinct trigger specs: 57
+  OK   distinct trigger lifetimes: 6
+  OK   distinct targets: 15
+  OK   distinct source zones: 7
+  OK   distinct destination zones: 4
+  OK   distinct card filters: 5
+
+=== specs by numeric-slot count ===
+  OK   0 slot(s): 254
+  OK   1 slot(s): 607
+  OK   2 slot(s): 70
+
+=== per-character pool sizes ===
+  Colorless      pool=87
+  Defect         pool=170
+  Ironclad       pool=171
+  Necrobinder    pool=176
+  Regent         pool=178
+  Silent         pool=149
+  OK   sum of character pools == fragment count: 931
+
+=== the mechanism contract's premise: conditions and effects are separate fragments ===
+  effect-side fragments:  775
+  trigger-side fragments: 156
+  OK   effect + trigger == total: 931
+  distinct trigger-side templates: 90
+  sample: A:ProxyAtomic_Buffer, A:ProxyAtomic_Calcify, A:ProxyAtomic_ForbiddenGrimoire, A:ProxyAtomic_Parry, A:ProxyAtomic_Royalties, A:ProxyAtomic_SwordSage, A:VoidFormFirstCardsFree, A:firstCardPlayedEachTurn, A:firstZeroCostAttackPlayedEachTurn, A:rule, A:ruleFirstShivBonusDamage, A:rulePlayedSkillsGainSly
+
+=== determinism of the data layer itself ===
+  OK   digest stable within a process: True
+  pool digest: 78F50545917EE2651AA147BE3613310046A64BD70E29C10E2760821547CBF201
+
+=== a sample recipe, to confirm the join is real ===
+  Ironclad/Aggression cost=1 type=Power rarity=Rare
+    A:turnStart      scope=AbilityTrigger     opcode=trigger                        variant=event
+    N:Move           scope=NonTargeted        opcode=move_card                      variant=random
+    I:UpgradeThatCard scope=Independent        opcode=upgrade_card                   variant=referenced
+
+=== STAGE B: generator core ===
+
+--- B.0 derived pool statistics (must match the measured pool) ---
+  OK   Ironclad ComponentCounts: 1,2,3,4
+  OK   Ironclad ComponentCountCounts sum == recipes: 85
+  OK   Ironclad RarityEffectCountMinimum(Common): 1
+  OK   Ironclad adaptive window(0): 1..5
+  OK   Ironclad adaptive window(3): 2..5
+  OK   Ironclad adaptive window(12) converges to the ceiling: 5..5
+  OK   Ironclad adaptive window(15) pushes both past it: 6..6
+  OK   Ironclad adaptive window is capped at 8: 8..8
+  OK   Silent ComponentCounts: 1,2,3
+  OK   Silent ComponentCountCounts sum == recipes: 86
+  OK   Silent RarityEffectCountMinimum(Common): 1
+  OK   Silent adaptive window(0): 1..5
+  OK   Silent adaptive window(3): 2..5
+  OK   Silent adaptive window(12) converges to the ceiling: 5..5
+  OK   Silent adaptive window(15) pushes both past it: 6..6
+  OK   Silent adaptive window is capped at 8: 8..8
+  OK   Defect ComponentCounts: 1,2,3,4
+  OK   Defect ComponentCountCounts sum == recipes: 86
+  OK   Defect RarityEffectCountMinimum(Common): 1
+  OK   Defect adaptive window(0): 1..5
+  OK   Defect adaptive window(3): 2..5
+  OK   Defect adaptive window(12) converges to the ceiling: 5..5
+  OK   Defect adaptive window(15) pushes both past it: 6..6
+  OK   Defect adaptive window is capped at 8: 8..8
+  OK   Necrobinder ComponentCounts: 1,2,3,4
+  OK   Necrobinder ComponentCountCounts sum == recipes: 86
+  OK   Necrobinder RarityEffectCountMinimum(Common): 1
+  OK   Necrobinder adaptive window(0): 1..5
+  OK   Necrobinder adaptive window(3): 2..5
+  OK   Necrobinder adaptive window(12) converges to the ceiling: 5..5
+  OK   Necrobinder adaptive window(15) pushes both past it: 6..6
+  OK   Necrobinder adaptive window is capped at 8: 8..8
+  OK   Regent ComponentCounts: 1,2,3,4
+  OK   Regent ComponentCountCounts sum == recipes: 86
+  OK   Regent RarityEffectCountMinimum(Common): 1
+  OK   Regent adaptive window(0): 1..5
+  OK   Regent adaptive window(3): 2..5
+  OK   Regent adaptive window(12) converges to the ceiling: 5..5
+  OK   Regent adaptive window(15) pushes both past it: 6..6
+  OK   Regent adaptive window is capped at 8: 8..8
+  OK   Colorless ComponentCounts: 1,2,3
+  OK   Colorless ComponentCountCounts sum == recipes: 52
+  OK   Colorless RarityEffectCountMinimum(Common): 1
+  OK   Colorless adaptive window(0): 1..5
+  OK   Colorless adaptive window(3): 2..5
+  OK   Colorless adaptive window(12) converges to the ceiling: 5..5
+  OK   Colorless adaptive window(15) pushes both past it: 6..6
+  OK   Colorless adaptive window is capped at 8: 8..8
+  note: RarityEffectCountMinimum is computed but only consumed when
+        raiseAggressiveEffectFloor is set; the default path never applies it.
+
+--- B.1/B.2 generate, then measure ---
+  Colorless    ok=1250 fail=   0  decisions=2499 coinFlip=41/81 (50.6%) needsPayoff=238 difficult=0 prefix=7 triggerSelfReject=45 noLink=848 saturated=0
+  Defect       ok=1250 fail=   0  decisions=3271 coinFlip=47/96 (49.0%) needsPayoff=185 difficult=0 prefix=87 triggerSelfReject=46 noLink=1482 saturated=19
+  Ironclad     ok=1250 fail=   0  decisions=3277 coinFlip=61/115 (53.0%) needsPayoff=254 difficult=0 prefix=0 triggerSelfReject=121 noLink=1375 saturated=20
+  Necrobinder  ok=1250 fail=   0  decisions=3263 coinFlip=70/137 (51.1%) needsPayoff=261 difficult=0 prefix=106 triggerSelfReject=41 noLink=1303 saturated=26
+  Regent       ok=1250 fail=   0  decisions=3285 coinFlip=57/126 (45.2%) needsPayoff=243 difficult=0 prefix=78 triggerSelfReject=65 noLink=1362 saturated=30
+  Silent       ok=1250 fail=   0  decisions=2543 coinFlip=21/50 (42.0%) needsPayoff=113 difficult=0 prefix=0 triggerSelfReject=50 noLink=993 saturated=0
+  OK   assemblies produced: True
+  OK   assembly success rate > 0.5: True
+  success rate: 7500/7500 = 100.0%
+  slot-count distribution: 1->2290, 2->2088, 3->2045, 4->1077
+  distinct opcodes in output: 33
+
+--- B.3 contract condition 1: fragments carry the full structured payload ---
+  operations total           : 16909
+  with a Trigger spec        : 1213
+  with a Condition spec      : 30
+  with numeric slots         : 13544
+  with an explicit target    : 16909
+  OK   every operation carries a target: 16909
+  OK   some operations carry a trigger spec: True
+
+--- B.4 contract condition 2: the same pool is sampled for both classes ---
+  vanilla (owner -> atom) pairs : 146
+  generated link pairs          : 1316
+  NOT present in any vanilla card: 1298 (98.6%)
+  OK   links were generated at all: True
+  OK   links exist that no vanilla card has: True
+
+--- B.5 contract condition 3: binding is a generation-time step ---
+  OK   operation[0] is always standalone: True
+  OK   every triggerIndex points at an EARLIER operation: True
+  OK   every triggerIndex targets a trigger or dependency prefix: True
+
+--- B.6 contract condition 4: plain conditions bind ~50% of the time ---
+  decisions=18138 coinFlip=297/605 (49.1%) needsPayoff=1294 difficult=0 prefix=278 triggerSelfReject=368 noLink=7363 saturated=95
+  OK   coin-flip trials are a meaningful sample: True
+  OK   coin-flip bind rate within 40%-60%: True
+  by design: rule 5 (unfulfilled trigger) binds 1294 times and
+             rule 13 (difficult condition) binds 0 times;
+             only the remaining 605 decisions are the coin flip.
+
+--- B.7 contract condition 5: a trigger is never re-bound ---
+  OK   no trigger-scope operation carries a link: 0
+  OK   the rule actually fired (not vacuous): True
+  rule 7 refused a link 368 times
+
+--- B.8 contract condition 7: determinism ---
+  OK   same material, same fingerprint (fresh instance): 13F64739238D8D0283EB99F68D52BA5E206A6BF1D43224CD60E0048F6C783F00
+  OK   material contains the version segment: True
+  OK   version bump changes the fingerprint: False
+  OK   different seed changes the fingerprint: False
+  OK   different character changes the fingerprint: False
+
+--- B.9 whole-run generation digest (compare across processes) ---
+  generation digest: 3735263FE51D63A183BAF6BAEA6B16B7F2A216BA8EB337ED134E144A2CC73F9C
+  OK   generation digest is stable within the process: 3735263FE51D63A183BAF6BAEA6B16B7F2A216BA8EB337ED134E144A2CC73F9C
+
+--- B.10 contract condition 6 preview: Rupture x Inferno, targeted ---
+  Ironclad cards scanned            : 10000
+  'owner_hp_lost_during_turn' -> 'lose_hp' links: 23
+  sample card:
+    Ironclad/Corruption [Ancient Power target=Other cost=3] ops=4
+        [0] A:whenOwnerHpLostDuringTurn  scope=AbilityTrigger     op=trigger                        variant=event                              triggerIndex=-1
+        [1] N:Draw                       scope=NonTargeted        op=draw_cards                     variant=immediate                          triggerIndex=0 values=draw:1
+        [2] N:HP-                        scope=NonTargeted        op=lose_hp                        variant=immediate                          triggerIndex=0 values=hp_loss:6
+        [3] N:Draw                       scope=NonTargeted        op=draw_cards                     variant=immediate                          triggerIndex=-1 values=draw:1
+  OK   the contract's named combination is reachable: True
+
+ALL CHECKS PASSED
+
+[dotnet-env exit=0]
