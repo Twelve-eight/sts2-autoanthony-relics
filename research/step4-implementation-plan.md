@@ -153,6 +153,34 @@ Template 前缀分布: `N` 292 / `T` 179 / `NCR` 91 / `A` 89 / `D` 73 / `R` 60 /
 
 **验收**: 每批实现后, 用探针对该角色的原生参照卡做"同一 spec 解释结果一致"的断言。
 
+#### 阶段 C 进度 - 片 1+2 已完成 (Session 3, 实测)
+
+实现落在 `mod/Code/Interpretation/`, 切成"纯规划层 + 薄执行层":
+纯层不碰任何 Godot 静态 / 引擎命令 / async (隔离探针要在引擎外断言解释器);
+执行层 `EffectExecutor` 只做 plan -> 引擎命令。
+
+| 文件 | 职责 | 是否触碰引擎 |
+| --- | --- | --- |
+| `InterpreterTypes.cs` | plan 结果类型 / `InterpreterContext` / 三态 outcome | 仅引擎纯枚举 (`CardType` / `ValueProp` / `Zone`) |
+| `VariantTable.cs` | 306 个 (opcode,variant) 对的显式分类 + 冻结清单 | 否 |
+| `OperationPlanner.cs` | 片 1+2 的忠实解析 | 否 |
+| `EffectExecutor.cs` | plan -> 引擎命令 | 是 (无 Godot 静态) |
+
+分类实测 **Implemented 42 / DelegatedToNative 25 / Pending 239 = 306**;
+池外配对抛 `UnclassifiedVariantException`, **零未知兜底** (不是静默 Pending)。
+
+- 片 1 = `deal_damage` (`selected`/`all`/`random`) / `gain_block` / `apply_power` (16 变体) /
+  `draw_cards` / `gain_energy` / `gain_stars` / `lose_hp` / `heal`。
+- 片 2 = `trigger|event` + 16 个 `condition` 变体 (`triggerIndex` 的运行期分发)。
+- 仍 Pending: `apply_power|poison` (原版不在结构化分派内, 走 `N:RandomPoison` 模板处理器)、
+  `apply_power|focus_loss_this_turn` (需要自建临时集中 power)、`trigger|doom_threshold`
+  与 2 个 Modifier 作用域的 `condition` (修饰符工作)。
+
+**验收 (探针 C.0-C.5, 全部通过)**: 306 对穷尽分类零兜底; 56 个 ValueProp 组合与
+原版真值表一致; `lose_hp` self/non-self = props 14/6; `native_reference_cards.json`
+全量 931 个组件逐条往返一致 (567 卡 / 1051 组件 / 306 对, 0 处不一致);
+`owner_hp_lost_during_turn -> lose_hp` 链解析为"宿主被承载 + 联动效果自指 props 14"。
+
 ### 阶段 D - §9 条件 6 的验收样例 (可判定的里程碑)
 
 必须能生成出 **"每当你在回合内失去生命" + "失去 1 点生命"** ——

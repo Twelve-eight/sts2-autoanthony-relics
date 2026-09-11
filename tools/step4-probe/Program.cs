@@ -2,6 +2,9 @@ using System.Reflection;
 using System.Text.Json;
 using AutoAnthonyRelics.Data;
 using AutoAnthonyRelics.Generation;
+using AutoAnthonyRelics.Interpretation;
+using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.ValueProps;
 
 // Stage A probe: the data layer must be provably identical to the pool the
 // plan was sized against. Every number below was measured independently with
@@ -533,6 +536,538 @@ if (sampleCard != null)
 }
 Check("the contract's named combination is reachable", ruptureInferno > 0, true);
 
+// ---------------------------------------------------------------------------
+// STAGE C - the interpreter (slices 1+2).
+//
+// The interpreter is split into a pure planning layer (OperationPlanner,
+// VariantTable) and an engine-facing executor (EffectExecutor). The probe only
+// ever touches the pure half: the executor is never called here, because
+// touching a Godot static outside the engine is a native access violation that
+// try/catch cannot contain. See InterpreterTypes.cs.
+// ---------------------------------------------------------------------------
+
+Console.WriteLine();
+Console.WriteLine("=== STAGE C: interpreter (slices 1+2) ===");
+
+var fragmentBySemanticId = catalog.Fragments
+    .GroupBy(f => f.SemanticId, StringComparer.Ordinal)
+    .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+var catalogPairs = new HashSet<string>(StringComparer.Ordinal);
+foreach (JoinedFragment fragment in catalog.Fragments)
+{
+    if (fragment.Spec is { } fragmentSpec)
+    {
+        catalogPairs.Add(VariantTable.Key(fragmentSpec.Opcode, fragmentSpec.Variant));
+    }
+}
+
+JoinedFragment Frag(string template, string variant, string target) =>
+    catalog.Fragments.First(f =>
+        f.Template == template && f.Spec!.Variant == variant && f.Spec.Target == target);
+
+GeneratedOperation Op(JoinedFragment fragment, int triggerIndex = -1) =>
+    new(fragment, triggerIndex, fragment.Spec!.Values
+        .Select(v => new ResolvedValue(v.Id, v.BaseValue + v.Offset, v.Upgradable))
+        .ToArray());
+
+GeneratedCard MakeCard(GeneratedCardType type, params GeneratedOperation[] operations) =>
+    new("Ironclad", GeneratedRarity.Common, "ProbeShell", 1, -1, false, type,
+        GeneratedTargetMode.Other, Array.Empty<string>(), operations);
+
+Console.WriteLine();
+Console.WriteLine("--- C.0 variant table: every pool pair is classified, none falls through ---");
+VariantCounts variantCounts = VariantTable.Counts();
+Console.WriteLine($"  {variantCounts}");
+Check("catalog (opcode, variant) pairs", catalogPairs.Count, 306);
+Check("frozen manifest size", VariantTable.PoolPairs.Count, 306);
+Check("frozen manifest has no duplicate entries",
+    VariantTable.PoolPairs.Distinct(StringComparer.Ordinal).Count(), VariantTable.PoolPairs.Count);
+Check("frozen manifest == catalog pair set",
+    VariantTable.PoolPairs.ToHashSet(StringComparer.Ordinal).SetEquals(catalogPairs), true);
+Check("classified total == pool total", variantCounts.Total, 306);
+Check("Implemented", variantCounts.Implemented, 42);
+Check("DelegatedToNative", variantCounts.DelegatedToNative, 25);
+Check("Pending", variantCounts.Pending, 239);
+
+// Exhaustiveness: classify every catalog pair and count any that is unknown.
+// A pair outside the pool must throw rather than being silently called Pending -
+// that is the whole difference between "not written yet" and "not recognised".
+int unclassified = 0;
+foreach (string pairKey in catalogPairs)
+{
+    int separator = pairKey.IndexOf('|', StringComparison.Ordinal);
+    try
+    {
+        VariantTable.Classify(pairKey[..separator], pairKey[(separator + 1)..]);
+    }
+    catch (UnclassifiedVariantException)
+    {
+        unclassified++;
+    }
+}
+Check("pairs falling through to an unknown default", unclassified, 0);
+bool threwForOutsider = false;
+try
+{
+    VariantTable.Classify("no_such_opcode", "no_such_variant");
+}
+catch (UnclassifiedVariantException)
+{
+    threwForOutsider = true;
+}
+Check("a pair outside the pool throws instead of defaulting", threwForOutsider, true);
+
+Console.WriteLine();
+Console.WriteLine("--- C.1 ValueProp derivations vs the original's truth table ---");
+// The expected values are written out independently here, straight from the
+// original's control flow (ChaosOperationExecutor.cs:1463-1487), so this is a
+// transcription check and not the implementation confirming itself.
+CardType[] allCardTypes =
+[
+    CardType.None, CardType.Attack, CardType.Skill, CardType.Power,
+    CardType.Status, CardType.Curse, CardType.Quest,
+];
+int propMismatches = 0;
+int propCases = 0;
+foreach (CardType type in allCardTypes)
+{
+    foreach (bool triggered in new[] { false, true })
+    {
+        foreach (bool powered in new[] { false, true })
+        {
+            int expectedDamage = type == CardType.Power ? 4 : (triggered && !powered ? 12 : 8);
+            int actualDamage = (int)OperationPlanner.DamagePropsForCardEffect(type, triggered, powered);
+            if (actualDamage != expectedDamage)
+            {
+                propMismatches++;
+                Console.WriteLine($"    damage mismatch: type={type} triggered={triggered} powered={powered} got={actualDamage} want={expectedDamage}");
+            }
+            propCases++;
+
+            int expectedBlock = type == CardType.Power || triggered ? 4 : 8;
+            int actualBlock = (int)OperationPlanner.BlockPropsForCardEffect(type, triggered);
+            if (actualBlock != expectedBlock)
+            {
+                propMismatches++;
+                Console.WriteLine($"    block mismatch: type={type} triggered={triggered} got={actualBlock} want={expectedBlock}");
+            }
+            propCases++;
+        }
+    }
+}
+Check($"{propCases} damage/block prop cases match the original", propMismatches, 0);
+Check("8 == Move (powered attack)", (int)ValueProp.Move, 8);
+Check("12 == Move|Unpowered (unpowered attack)", (int)(ValueProp.Move | ValueProp.Unpowered), 12);
+Check("4 == Unpowered (power / triggered block)", (int)ValueProp.Unpowered, 4);
+
+int poweredAttackMismatches = 0;
+foreach (CardType type in allCardTypes)
+{
+    foreach (bool inCombatPile in new[] { false, true })
+    {
+        bool expected = type != CardType.Power && inCombatPile;
+        if (OperationPlanner.TriggeredDamageUsesPoweredAttack(inCombatPile, type) != expected)
+        {
+            poweredAttackMismatches++;
+        }
+    }
+}
+Check("TriggeredDamageUsesPoweredAttack matches the original", poweredAttackMismatches, 0);
+
+Console.WriteLine();
+Console.WriteLine("--- C.2 lose_hp: self vs non-self target and props ---");
+JoinedFragment hpSelf = Frag("N:HP-", "immediate", "self");
+JoinedFragment hpOther = Frag("T:LoseHp", "immediate", "selected_enemy");
+int hpSelfExpected = hpSelf.Spec!.Values.First(v => v.Id == "hp_loss").BaseValue
+    + hpSelf.Spec.Values.First(v => v.Id == "hp_loss").Offset;
+int hpOtherExpected = hpOther.Spec!.Values.First(v => v.Id == "amount").BaseValue
+    + hpOther.Spec.Values.First(v => v.Id == "amount").Offset;
+
+GeneratedCard hpSelfCard = MakeCard(GeneratedCardType.Skill, Op(hpSelf));
+GeneratedCard hpOtherCard = MakeCard(GeneratedCardType.Attack, Op(hpOther));
+
+OperationPlan selfPlan = OperationPlanner.Plan(
+    hpSelfCard, 0, InterpreterContext.OnPlay(CardType.Skill, TargetAvailability.SelectedEnemy));
+Check("lose_hp self action", selfPlan.Action, PlannedActionKind.LoseHp);
+Check("lose_hp self target", selfPlan.Target, PlannedTargetSelector.Self);
+Check("lose_hp self props", (int)selfPlan.Props, 14);
+Check("lose_hp self amount == spec value", selfPlan.Amount, hpSelfExpected);
+Check("lose_hp self outcome", selfPlan.Outcome, PlanOutcome.Resolved);
+Console.WriteLine($"    self: {hpSelf.Template} -> amount={selfPlan.Amount} props={(int)selfPlan.Props} target={selfPlan.Target}");
+
+OperationPlan otherPlan = OperationPlanner.Plan(
+    hpOtherCard, 0, InterpreterContext.OnPlay(CardType.Attack, TargetAvailability.SelectedEnemy));
+Check("lose_hp non-self target", otherPlan.Target, PlannedTargetSelector.SelectedEnemy);
+Check("lose_hp non-self props", (int)otherPlan.Props, 6);
+Check("lose_hp non-self amount == spec value", otherPlan.Amount, hpOtherExpected);
+Console.WriteLine($"    other: {hpOther.Template} -> amount={otherPlan.Amount} props={(int)otherPlan.Props} target={otherPlan.Target}");
+
+// lose_hp ignores the source card's type: the original hardcodes 14 / 6.
+OperationPlan selfAsPower = OperationPlanner.Plan(
+    hpSelfCard, 0, InterpreterContext.OnPlay(CardType.Power, TargetAvailability.SelectedEnemy));
+Check("lose_hp self props do not depend on card type", (int)selfAsPower.Props, 14);
+
+// With no creature available the original returns early: `if (target == null) return true;`
+OperationPlan otherNoTarget = OperationPlanner.Plan(hpOtherCard, 0, InterpreterContext.OnPlay(CardType.Attack));
+Check("lose_hp non-self with no target is flagged unavailable", otherNoTarget.TargetUnavailable, true);
+Check("lose_hp self is never flagged unavailable", selfPlan.TargetUnavailable, false);
+
+Console.WriteLine();
+Console.WriteLine("--- C.3 classification and plan outcome agree over the whole pool ---");
+// For every one of the 306 pairs, take a representative pool fragment, plan it,
+// and check the plan's outcome is exactly what the table promised. This is the
+// "zero fallthrough" assertion in its strongest form: it is not enough that the
+// table has an answer, the planner has to act on that answer.
+int implementedResolved = 0;
+int delegatedOk = 0;
+int pendingOk = 0;
+int outcomeDisagreements = 0;
+var implementedSamples = new Dictionary<string, string>(StringComparer.Ordinal);
+foreach (string pairKey in catalogPairs.OrderBy(k => k, StringComparer.Ordinal))
+{
+    int separator = pairKey.IndexOf('|', StringComparison.Ordinal);
+    string opcode = pairKey[..separator];
+    string variant = pairKey[(separator + 1)..];
+    JoinedFragment representative = catalog.Fragments.First(f =>
+        f.Spec is { } s && s.Opcode == opcode && s.Variant == variant);
+
+    GeneratedCard probeCard = MakeCard(GeneratedCardType.Skill, Op(representative));
+    OperationPlan probePlan = OperationPlanner.Plan(
+        probeCard, 0, InterpreterContext.OnPlay(CardType.Skill, TargetAvailability.SelectedEnemy));
+
+    switch (VariantTable.Classify(opcode, variant))
+    {
+        case VariantClassification.Implemented:
+            if (probePlan.Outcome == PlanOutcome.Resolved)
+            {
+                implementedResolved++;
+                implementedSamples[pairKey] = probePlan.Action.ToString();
+            }
+            else
+            {
+                outcomeDisagreements++;
+                Console.WriteLine($"    Implemented but plan says {probePlan.Outcome}: {pairKey}");
+            }
+            break;
+        case VariantClassification.DelegatedToNative:
+            if (probePlan.Outcome == PlanOutcome.DelegatedToNative)
+            {
+                delegatedOk++;
+            }
+            else
+            {
+                outcomeDisagreements++;
+                Console.WriteLine($"    DelegatedToNative but plan says {probePlan.Outcome}: {pairKey}");
+            }
+            break;
+        default:
+            if (probePlan.Outcome == PlanOutcome.Unsupported)
+            {
+                pendingOk++;
+            }
+            else
+            {
+                outcomeDisagreements++;
+                Console.WriteLine($"    Pending but plan says {probePlan.Outcome}: {pairKey}");
+            }
+            break;
+    }
+}
+Check("Implemented pairs that resolve", implementedResolved, 42);
+Check("DelegatedToNative pairs that delegate", delegatedOk, 25);
+Check("Pending pairs that report Unsupported", pendingOk, 239);
+Check("classification and plan outcome never disagree", outcomeDisagreements, 0);
+Console.WriteLine("  implemented pairs, by resolved action:");
+foreach (var group in implementedSamples.GroupBy(kv => kv.Value).OrderBy(g => g.Key, StringComparer.Ordinal))
+{
+    Console.WriteLine($"    {group.Key,-16} {group.Count()}");
+}
+
+Console.WriteLine();
+Console.WriteLine("--- C.4 native reference round trip (whole reference set) ---");
+// research/native_reference_cards.json is the engine's own cards decomposed in
+// the same opcode/variant language. It is ReferenceOnly / GenerationEligible:
+// false, so it is not a generation source - it is the golden reference for
+// "does our planner read a spec the same way the spec says it should be read".
+string? referencePath = null;
+for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+{
+    string candidate = Path.Combine(dir.FullName, "research", "native_reference_cards.json");
+    if (File.Exists(candidate))
+    {
+        referencePath = candidate;
+        break;
+    }
+}
+Check("reference file located", referencePath != null, true);
+if (referencePath == null)
+{
+    Console.WriteLine("  (reference file missing; skipping C.4 - this is a probe setup failure, not a planner result)");
+}
+else
+{
+    ReferenceRoot reference = JsonSerializer.Deserialize<ReferenceRoot>(
+        File.ReadAllText(referencePath),
+        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+    Console.WriteLine($"  {reference.Cards.Count} reference cards at {referencePath}");
+
+    int referenceComponents = 0;
+    int referenceWithSpec = 0;
+    int missingPoolAtom = 0;
+    int specFieldMismatches = 0;
+    int roundTripMismatches = 0;
+    int referenceResolved = 0;
+    int referenceDelegated = 0;
+    int referencePending = 0;
+    var dispositionCounts = new Dictionary<PlanDisposition, int>();
+    var referencePairs = new HashSet<string>(StringComparer.Ordinal);
+
+    foreach (ReferenceCard referenceCard in reference.Cards)
+    {
+        var operations = new List<GeneratedOperation>();
+        var operationComponentIndex = new List<int>();
+        var componentToOperation = new int[referenceCard.Components.Count];
+        for (int ci = 0; ci < referenceCard.Components.Count; ci++)
+        {
+            componentToOperation[ci] = -1;
+        }
+
+        for (int ci = 0; ci < referenceCard.Components.Count; ci++)
+        {
+            ReferenceComponent component = referenceCard.Components[ci];
+            referenceComponents++;
+            if (component.RuntimeSpec is not { } referenceSpec || component.SemanticId is null)
+            {
+                continue;
+            }
+            referenceWithSpec++;
+            referencePairs.Add(VariantTable.Key(referenceSpec.Opcode, referenceSpec.Variant));
+
+            if (!fragmentBySemanticId.TryGetValue(component.SemanticId, out JoinedFragment? source))
+            {
+                missingPoolAtom++;
+                continue;
+            }
+
+            // The reference spec and the pool spec must be the same object
+            // language; if they drift, everything downstream is meaningless.
+            RuntimeSpec poolSpec = source.Spec!;
+            if (poolSpec.Opcode != referenceSpec.Opcode
+                || poolSpec.Variant != referenceSpec.Variant
+                || poolSpec.Target != referenceSpec.Target
+                || poolSpec.SourceZone != referenceSpec.SourceZone
+                || poolSpec.DestinationZone != referenceSpec.DestinationZone
+                || poolSpec.CardFilter != referenceSpec.CardFilter)
+            {
+                specFieldMismatches++;
+            }
+
+            componentToOperation[ci] = operations.Count;
+            operationComponentIndex.Add(ci);
+            operations.Add(new GeneratedOperation(
+                source,
+                -1,
+                referenceSpec.Values
+                    .Select(v => new ResolvedValue(v.Id, v.BaseValue + v.Offset, v.Upgradable))
+                    .ToArray()));
+        }
+
+        // The reference's TriggerOwner indexes the FULL component list (including
+        // the selector components that carry no RuntimeSpec), so it has to be
+        // translated into operation indices rather than used directly.
+        for (int i = 0; i < operations.Count; i++)
+        {
+            int owner = referenceCard.Components[operationComponentIndex[i]].TriggerOwner;
+            int mapped = owner >= 0 && owner < componentToOperation.Length ? componentToOperation[owner] : -1;
+            if (mapped >= i)
+            {
+                mapped = -1;
+            }
+            operations[i] = operations[i] with { TriggerIndex = mapped };
+        }
+
+        var planned = new GeneratedCard(
+            "native", GeneratedRarity.Common, referenceCard.CatalogId, 0, -1, false,
+            GeneratedCardType.Skill, GeneratedTargetMode.Other, Array.Empty<string>(), operations);
+        InterpreterContext referenceContext =
+            InterpreterContext.OnPlay(CardType.Skill, TargetAvailability.SelectedEnemy);
+
+        for (int i = 0; i < operations.Count; i++)
+        {
+            OperationPlan plan = OperationPlanner.Plan(planned, i, referenceContext);
+            ReferenceSpec expected = referenceCard.Components[operationComponentIndex[i]].RuntimeSpec!;
+            if (plan.Opcode != expected.Opcode
+                || plan.Variant != expected.Variant
+                || plan.DeclaredTarget != expected.Target)
+            {
+                roundTripMismatches++;
+                if (roundTripMismatches <= 5)
+                {
+                    Console.WriteLine(
+                        $"    round-trip mismatch at {referenceCard.CatalogId}[{i}]: " +
+                        $"plan={plan.Opcode}/{plan.Variant}/{plan.DeclaredTarget} " +
+                        $"spec={expected.Opcode}/{expected.Variant}/{expected.Target}");
+                }
+            }
+
+            switch (plan.Outcome)
+            {
+                case PlanOutcome.Resolved:
+                    referenceResolved++;
+                    break;
+                case PlanOutcome.DelegatedToNative:
+                    referenceDelegated++;
+                    break;
+                default:
+                    referencePending++;
+                    break;
+            }
+            dispositionCounts.TryGetValue(plan.Disposition, out int seen);
+            dispositionCounts[plan.Disposition] = seen + 1;
+        }
+    }
+    Console.WriteLine($"  components={referenceComponents} with RuntimeSpec={referenceWithSpec}");
+    Console.WriteLine($"  distinct pairs in reference={referencePairs.Count}");
+    Console.WriteLine($"  resolved={referenceResolved} delegated={referenceDelegated} pending={referencePending}");
+    Console.WriteLine("  dispositions: " + string.Join(", ",
+        dispositionCounts.OrderBy(kv => kv.Key.ToString(), StringComparer.Ordinal)
+            .Select(kv => $"{kv.Key}={kv.Value}")));
+    Check("reference pairs are all in the pool", referencePairs.IsSubsetOf(catalogPairs), true);
+    Check("reference spec ids all resolve to a pool atom", missingPoolAtom, 0);
+    Check("reference spec fields match the pool spec", specFieldMismatches, 0);
+    Check("planner echoes the declared opcode/variant/target for every reference operation", roundTripMismatches, 0);
+    Check("reference resolution split adds up", referenceResolved + referenceDelegated + referencePending, referenceWithSpec);
+
+    // Independent cross-check, not self-confirmation: these five numbers were
+    // computed by a separate Python implementation over the same reference JSON
+    // plus the same two embedded pool files (scope/template from the recipes,
+    // classification from the runtime specs), using the original's own
+    // RequiresCompositePower / IsLingeringTrigger / for-each sets. The first run
+    // of this probe disagreed (LinkedEffect 122 vs 117, Modifier 55 vs 60) and
+    // that is what caught a real ordering bug in OperationPlanner.ResolveDisposition:
+    // scope Modifier must be skipped BEFORE the trigger link is consulted,
+    // because the original never executes a Modifier (ChaosOperationExecutor.cs:118, :360).
+    Check("disposition OnPlay", dispositionCounts.GetValueOrDefault(PlanDisposition.OnPlay), 610);
+    Check("disposition CarriedHost", dispositionCounts.GetValueOrDefault(PlanDisposition.CarriedHost), 115);
+    Check("disposition LinkedEffect", dispositionCounts.GetValueOrDefault(PlanDisposition.LinkedEffect), 117);
+    Check("disposition InlineGate", dispositionCounts.GetValueOrDefault(PlanDisposition.InlineGate), 29);
+    Check("disposition Modifier", dispositionCounts.GetValueOrDefault(PlanDisposition.Modifier), 60);
+    Check("dispositions cover every reference operation", dispositionCounts.Values.Sum(), referenceWithSpec);
+}
+
+Console.WriteLine();
+Console.WriteLine("--- C.5 contract condition 6: owner_hp_lost_during_turn -> lose_hp chain ---");
+// Stage D owns the formal acceptance gate, but the interpreter half of it is
+// decidable here: when the generator produces that chain, the host must be
+// CARRIED and the linked effect must resolve to a self-targeted lose_hp with
+// props 14. The scan is targeted for the reason documented in B.10.
+int chainHits = 0;
+GeneratedCard? chainCard = null;
+int chainHostIndex = -1;
+int chainEffectIndex = -1;
+for (int seed = 0; seed < 4000 && chainCard == null; seed++)
+{
+    var scanner = new CardAssembler(ironcladPool, GenerationSeed.For(ModId, "Ironclad", seed));
+    foreach (GeneratedRarity rarity in AllRarities)
+    {
+        GeneratedCard? candidate = scanner.Assemble(rarity, out _);
+        if (candidate == null)
+        {
+            continue;
+        }
+        for (int i = 0; i < candidate.Operations.Count; i++)
+        {
+            GeneratedOperation operation = candidate.Operations[i];
+            if (operation.TriggerIndex < 0)
+            {
+                continue;
+            }
+            GeneratedOperation host = candidate.Operations[operation.TriggerIndex];
+            if (host.Spec.Trigger?.Kind == "owner_hp_lost_during_turn"
+                && operation.Spec.ParsedOpcode == SpecOpcode.LoseHp)
+            {
+                chainHits++;
+                if (chainCard == null)
+                {
+                    chainCard = candidate;
+                    chainHostIndex = operation.TriggerIndex;
+                    chainEffectIndex = i;
+                }
+            }
+        }
+    }
+}
+Check("the chain was found", chainCard != null, true);
+if (chainCard != null)
+{
+    CardPlan chainPlan = OperationPlanner.PlanCard(
+        chainCard, InterpreterContext.OnPlay(CardType.Power, TargetAvailability.SelectedEnemy));
+    OperationPlan hostPlan = chainPlan[chainHostIndex];
+    OperationPlan effectPlan = chainPlan[chainEffectIndex];
+
+    Console.WriteLine($"  host   [{chainHostIndex}] {hostPlan.Opcode}/{hostPlan.Variant} " +
+                      $"disposition={hostPlan.Disposition} trigger={hostPlan.TriggerKind}/{hostPlan.TriggerLifetime}");
+    Console.WriteLine($"  effect [{chainEffectIndex}] {effectPlan.Opcode}/{effectPlan.Variant} " +
+                      $"disposition={effectPlan.Disposition} target={effectPlan.Target} " +
+                      $"action={effectPlan.Action} amount={effectPlan.Amount} props={(int)effectPlan.Props}");
+
+    Check("the trigger host is carried", hostPlan.Disposition, PlanDisposition.CarriedHost);
+    Check("the host resolves as a trigger event", hostPlan.Action, PlannedActionKind.TriggerEvent);
+    Check("the host carries the contract's trigger kind", hostPlan.TriggerKind, "owner_hp_lost_during_turn");
+    Check("the host lifetime is combat", hostPlan.TriggerLifetime, "combat");
+    Check("the linked effect is deferred to its host", effectPlan.Disposition, PlanDisposition.LinkedEffect);
+    Check("the linked effect points back at the host", effectPlan.HostIndex, chainHostIndex);
+    Check("the linked effect is lose_hp", effectPlan.Action, PlannedActionKind.LoseHp);
+    Check("the linked effect is self-targeted", effectPlan.Target, PlannedTargetSelector.Self);
+    Check("the linked effect uses props 14", (int)effectPlan.Props, 14);
+    Check("the card arms a carried host", chainPlan.ArmsCarriedHosts, true);
+    Check("the card's forward scan finds exactly this linked effect",
+        chainPlan.LinkedEffectIndices(chainHostIndex).Contains(chainEffectIndex), true);
+    Console.WriteLine($"  scanned {chainHits} such chains; sample card:");
+    Console.WriteLine("    " + chainPlan.Describe().Replace("\n", "\n    "));
+}
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures == 0 ? 0 : 1;
+
+// Minimal shape of research/native_reference_cards.json - only the fields this
+// probe reads. The file is ReferenceOnly / GenerationEligible:false.
+internal sealed class ReferenceRoot
+{
+    public List<ReferenceCard> Cards { get; set; } = new();
+}
+
+internal sealed class ReferenceCard
+{
+    public string CatalogId { get; set; } = string.Empty;
+    public List<ReferenceComponent> Components { get; set; } = new();
+}
+
+internal sealed class ReferenceComponent
+{
+    public string? SemanticId { get; set; }
+    public int TriggerOwner { get; set; } = -1;
+    public ReferenceSpec? RuntimeSpec { get; set; }
+}
+
+internal sealed class ReferenceSpec
+{
+    public string Opcode { get; set; } = string.Empty;
+    public string Variant { get; set; } = string.Empty;
+    public string Target { get; set; } = string.Empty;
+    public string SourceZone { get; set; } = string.Empty;
+    public string DestinationZone { get; set; } = string.Empty;
+    public string CardFilter { get; set; } = string.Empty;
+    public List<ReferenceValue> Values { get; set; } = new();
+}
+
+internal sealed class ReferenceValue
+{
+    public string Id { get; set; } = string.Empty;
+    public int BaseValue { get; set; }
+    public int Offset { get; set; }
+    public bool Upgradable { get; set; }
+}
+
