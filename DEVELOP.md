@@ -5,6 +5,21 @@
 条件(触发)与效果在数据层就是同一池子里的两类**独立**片段, 只在拼装末尾用运行期
 `triggerIndex` 事后绑定 —— 所以任何条件都能挂到任何合法效果上。这就是"打乱条件"。
 
+## 当前产品状态 (2026-09-12 夜, 垂直切片)
+
+**本 mod 现在输出遗物** (用户裁定 D8/D9): 从引擎 300 个遗物类提取的 140 条候选原子,
+经 `research/relic_atom_ledger.json` 账本 (deny-by-default, 25 supported / 26 rejected,
+每条带证据) 过滤后拆成独立触发/效果片段池; 生成器每局种子确定性生成 60 件遗物
+(定义 = 纯函数 (modId, 版本, seed, slot), 配置零参与); 宿主为 BaseLib CustomRelicModel
+60 槽位类 + 11 事件钩子; RelicGrabBag 替换池, 与 Qurious 共存 (保留一切 CustomRelicModel)。
+
+- 代码入口: `mod/Code/` (Data=账本加载, Generation=片段+生成+文本, Models=宿主,
+  Patches=种子捕获+池替换)。卡牌主线的 Generation/Interpretation 代码保留为历史阶段, 未删除。
+- 验证: `tools/relic-probe` 24/24 (构建/账本/确定性/文本/执行器漂移)。
+- 未验: 实机双端联机; 实机获取→触发→存读档冒烟 (见 DEVLOG 2026-09-12 夜)。
+
+---
+
 ## 数据来源与署名 (硬要求)
 
 - 生成池数据 (`catalog_recipes.json` 481 条配方 / 931 个原子实例,

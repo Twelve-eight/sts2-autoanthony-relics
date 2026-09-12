@@ -1,0 +1,95 @@
+"workshopitem"
+{
+	"appid"		"2868840"
+	"contentfolder"		"G:\\omp works\\sts2-autoanthony-relics\\workshop\\content"
+	"previewfile"		"G:\\omp works\\sts2-autoanthony-relics\\workshop\\preview.png"
+	"visibility"		"0"
+	"title"		"Anthony Algorithm - Relics (东尼算法 - 遗物)"
+	"description"		"[h1]东尼算法 - 遗物 / Anthony Algorithm - Relics[/h1]
+
+每局游戏,用东尼算法从本局种子确定性地生成 60 件遗物,并替换本局全部的遗物掉落.
+与原版东尼算法相同的核心机制:[b]触发与效果是独立片段,生成时随机重组[/b] ——
+任何合法的触发条件都可能挂上任何合法的效果,包括原版从未存在过的组合.
+[i]Every run, deterministically generate 60 relics from the run seed and replace all relic drops. Triggers and effects are independent fragments recombined at generation time - the Anthony algorithm applied to relics.[/i]
+
+[hr]
+
+[h2]它做什么 / What it does[/h2]
+
+[list]
+[*][b]60 件生成遗物[/b] - 每局从种子派生,逐槽位重新生成(20 普通 / 21 罕见 / 19 稀有附近分布)
+[*][b]条件重组[/b] - 触发片段(回合开始 / 回合结束 / 战斗开始 / 战斗结束 / 战斗胜利 / 进入战斗 / 拾取时 / 打出能力牌 / 敌人死亡 / 获得金币 / 格挡被清空)与效果片段(力量 / 勇气 / 荆棘 / 全体易伤 / 格挡 / 回复 / 能量 / 抽牌 / 生命上限 / 金币 / 药水栏位 / 全体伤害)从[b]同一个池子独立采样[/b]
+[*][b]双效果遗物[/b] - 约 30% 的遗物携带两个效果,同挂一个触发
+[*][b]纯被动遗物[/b] - 少数遗物是首回合抽牌修正(正负都有)
+[*][b]中英双语描述[/b] - 每件遗物的名字与描述由片段语义实时渲染
+[*][b]确定性[/b] - 同种子 = 同一批遗物(逐字节一致);定义不读任何设置项,读档/重连恢复同一批
+[/list]
+
+[h2]数据忠实度 / Data fidelity[/h2]
+
+原子池从游戏[b]自身的 300 个遗物类[/b]提取,并经过[b]逐条人工审计账本[/b]过滤:
+只有证据完整、六项对账(何时/谁/目标/数值/条件/状态)全部通过的片段进入生成池;
+提取器无法核实或提取错误的条目(阈值当数值 / 正负号丢失 / 条件反转等)一律[b]拒绝[/b].
+已知修复示例:水银玉猫袋(全体 1 易伤)、大蘑菇(首回合少抽 2 张,负号保留)、
+弯刀(力量 1)、药水腰带(2 个栏位).
+[i]Atoms are extracted from the game's own 300 relic classes and gated by a hand-audited deny-by-default ledger; unverifiable extractions never reach the pool.[/i]
+
+[h2]遗物替换范围 / Relic replacement[/h2]
+
+以下全部遗物来源只出生成遗物:
+[list]
+[*]战斗奖励 / 精英奖励 / 宝箱 / 商店 / 事件的随机遗物 / 挖掘 / 营火等
+[/list]
+
+保持原版不受影响的:
+[list]
+[*][b]先古之民(Ancient)遗物[/b] - 完全不动
+[*]初始遗物 / Neow 遗物 / 事件专属固定遗物(本就不经过奖励池)
+[/list]
+
+[h2]游戏内设置 / In-game settings[/h2]
+
+设置 -> 模组设置(专属设置页):
+[list]
+[*][b]Enabled(总开关)[/b] - 关闭后生成遗物停用,奖励池恢复原版
+[*][b]ReplaceVanillaRelics(替换原版遗物)[/b] - 关闭后生成遗物与原版遗物混合掉落
+[*][b]KeepModdedRelics(保留其他模组遗物)[/b] - 与其他 BaseLib 遗物模组共存
+[/list]
+
+[h2]与 怪异炼化 - 遗物 共存 / Coexistence with Qurious Crafting[/h2]
+
+可与 [b]Qurious Crafting - Relics(怪异炼化 - 遗物)[/b] 同装:两个模组的替换补丁都
+保留对方的自定义遗物,同装时掉落池是两者的混合,安装顺序无关.
+[i]Install alongside Qurious Crafting - Relics for a mixed pool of both generators; order-independent.[/i]
+
+[h2]多人联机 / Multiplayer[/h2]
+
+遗物定义是种子与槽位的纯函数,不读取任何设置项:同种子两端生成同一批遗物.
+设置项只控制本机行为(开关/替换范围),不影响生成内容.
+[i]Definitions are a pure function of the run seed and slot - no config participates, so both ends regenerate identical relics.[/i]
+
+[hr]
+
+[h2]署名与数据来源 / Attribution[/h2]
+
+[list]
+[*][b]机制[/b]:条件与效果独立采样、种子确定性重组,来自 [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3786611028]Alriph 的 Auto-Anthonyology(东尼算法)[/url] 的思想重写;本 mod 与其相互独立,不依赖也不重复其数据
+[*][b]原子数据[/b]:由本模组工具从《杀戮尖塔 2》自身遗物实现中提取,经人工审计账本过滤
+[*][b]生成器 / 宿主 / 渲染[/b]:本仓库独立实现
+[/list]
+
+[h2]前置依赖 / Requirements[/h2]
+
+[list]
+[*][b]必须[/b]:[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3737335127]BaseLib[/url] 3.4.5+
+[/list]
+
+[i]工坊版 BaseLib 更新经常落后于官方 GitHub;游戏更新后若 BaseLib 报错,请到 [url=https://github.com/Alchyr/BaseLib-StS2/releases]GitHub Releases[/url] 下载最新版并取消订阅工坊版.[/i]
+
+[h2]控制台验证(可选)/ Console test[/h2]
+
+局内按 ` 打开开发者控制台:
+[code]relic add AUTOANTHONYRELICS-ANTHONY_RELIC005[/code] (添加第 6 号槽位生成遗物)"
+	"changenote"		"v0.1.0: initial release - audited atom ledger, independent trigger/effect recombination, 60 seed-pure relic slots per run, Qurious coexistence, bilingual descriptions."
+	"publishedfileid"		""
+}
