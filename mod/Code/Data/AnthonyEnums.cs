@@ -60,6 +60,21 @@ public enum SpecOpcode
     ModifyX,
     EndTurn,
     RestrictBlockFromCards,
+    // Relic-specific opcodes. These do not exist in the card pool; they come
+    // from the engine relic atom pool (Code/Data/Json/relic_atoms.json) and are
+    // named here so an unrecognised opcode is still a compile-time-safe Unknown
+    // rather than a silently swallowed string.
+    GainGold,
+    SummonOsty,
+    ChannelOrb,
+    GainMaxPotion,
+    LoseMaxHp,
+    ModifyHandDraw,
+    ModifyMaxEnergy,
+    ModifyRestHeal,
+    ModifyOstyHpLoss,
+    ModifyCardPlayCount,
+    ModifyPowerGiven,
     Unknown,
 }
 
@@ -157,6 +172,18 @@ internal static class EnumParsing
             ["modify_x"] = SpecOpcode.ModifyX,
             ["end_turn"] = SpecOpcode.EndTurn,
             ["restrict_block_from_cards"] = SpecOpcode.RestrictBlockFromCards,
+            // Relic-specific opcodes (engine relic atom pool).
+            ["gain_gold"] = SpecOpcode.GainGold,
+            ["summon_osty"] = SpecOpcode.SummonOsty,
+            ["channel_orb"] = SpecOpcode.ChannelOrb,
+            ["gain_max_potion"] = SpecOpcode.GainMaxPotion,
+            ["lose_max_hp"] = SpecOpcode.LoseMaxHp,
+            ["modify_hand_draw"] = SpecOpcode.ModifyHandDraw,
+            ["modify_max_energy"] = SpecOpcode.ModifyMaxEnergy,
+            ["modify_rest_heal"] = SpecOpcode.ModifyRestHeal,
+            ["modify_osty_hp_loss"] = SpecOpcode.ModifyOstyHpLoss,
+            ["modify_card_play_count"] = SpecOpcode.ModifyCardPlayCount,
+            ["modify_power_given"] = SpecOpcode.ModifyPowerGiven,
         };
 
     private static readonly Dictionary<string, SpecTarget> Targets =
