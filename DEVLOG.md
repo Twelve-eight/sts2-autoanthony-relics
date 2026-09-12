@@ -407,3 +407,40 @@ C.4 的一个额外收获: reference JSON 的 931 个 `SemanticId` 与池子的 
 已部署实机 `mods/AutoAnthonyRelics/` (游戏未运行, 无锁)。卡牌主线代码
 (Generation/Card*, Interpretation/*) 保留未删, MainFile 不再加载卡牌 catalog
 (审查第二步要求)。git: 本节落盘后提交推送。
+
+---
+
+## 2026-09-13 (凌晨) 实机启动冒烟 + 本地化形状修复
+
+### 发现并修复: settings_ui.json 形状错误 (真机启动阻塞)
+
+- **发现**: 首次真机启动 (steam://rungameid/2868840) 首跑即失败关闭:
+  `LocException: Failed to parse ... settings_ui.json` —— 遗留自卡牌方向的本地化文件
+  使用了嵌套形状 `{"settings_ui": {...}}`, 引擎语言文件解析器要求**扁平**
+  `{"KEY.title": "text"}`; 解析异常在启动路径抛出 → 错误对话框亦失败 → 进程退出。
+- **修复**: eng/zhs 两个 settings_ui.json 重写为扁平形状, 键名按 BaseLib 规则
+  `{MODID大写}-{SLUG(属性名)}.title / .hover.desc` (对齐 Qurious 的可用样本)。
+
+### 冒烟结果 (修复后真机启动, 全部读自 godot.log)
+
+- 进主菜单成功, **0 个 LocException / startup error**; Time to main menu 19,979ms。
+- `[AutoAnthonyRelics] Harmony: 5 patch class(es) applied, 0 failed`;
+  `relic pool: 140 extracted atoms, 25 ledger-supported, 26 ledger-rejected;
+  fragments: 14 triggers, 20 triggered effects, 2 passives`;
+  配置三项默认值正确落盘。
+- `[QuriousCraftingRelics] cfg migration skipped: AutoAnthonyRelics.cfg does not
+  match the Qurious legacy schema; left untouched for its owner` —— **项 1 修复真机验证通过**。
+- `[Perfect] Harmony: 2 patch class(es) applied` —— 逐类安装修复真机验证 (旧版
+  单 PatchAll 连坐后池门控根本没装上)。
+- `[HeartShake] BeatOfDeath redirect patch applied` —— 命名空间修复真机验证
+  (旧版永远 skipped; 真机装有 Act4Heart)。
+- `[MpConfigSync] Harmony: 0 method(s) patched across 23 type(s)` + 无报错。
+- `[RegentFXFastBoot] ... ALREADY happened this launch ... FIX: move ... ABOVE RegentFX`
+  —— LATE-ARMED 状态按设计如实报告 (用户尚未调整模组顺序)。
+- `[ChaosBridge] TransformBatchDedup: transform batches are now without replacement.`
+- 引擎双源去重按版本工作: 本地 0.x.y 新版本生效, 工坊旧版自动停用 (测试期望行为)。
+
+### 余下人工验证
+
+进入一局: 掉落是否只出生成遗物、拾取→触发→存读档、双装 Qurious 混合池、
+控制台 `relic add AUTOANTHONYRELICS-ANTHONY_RELIC005`。

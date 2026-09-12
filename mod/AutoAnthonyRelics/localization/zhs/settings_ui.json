@@ -1,6 +1,8 @@
 {
-  "settings_ui": {
-    "AUTOANTHONYRELICS-Enabled.title": "启用东尼算法",
-    "AUTOANTHONYRELICS-Enabled.desc": "开启后, 每局开始时按东尼算法重采样整副卡池. 关闭则使用引擎原生卡池."
-  }
+  "AUTOANTHONYRELICS-ENABLED.title": "启用东尼算法 - 遗物",
+  "AUTOANTHONYRELICS-ENABLED.hover.desc": "总开关。关闭后：生成遗物不再出现，奖励池恢复原版遗物，已拥有的生成遗物效果停用。",
+  "AUTOANTHONYRELICS-REPLACE_VANILLA_RELICS.title": "替换原版遗物",
+  "AUTOANTHONYRELICS-REPLACE_VANILLA_RELICS.hover.desc": "开启时：从本局遗物袋中移除原版遗物，所有奖励来源（战斗/宝箱/商店/事件）只出生成遗物。先古之民、初始、Neow 与事件固定遗物永远不受影响。",
+  "AUTOANTHONYRELICS-KEEP_MODDED_RELICS.title": "保留其他模组的遗物",
+  "AUTOANTHONYRELICS-KEEP_MODDED_RELICS.hover.desc": "开启时：其他 BaseLib 遗物模组（如怪异炼化 - 遗物）的遗物与生成遗物共存于掉落池，与安装顺序无关。关闭时仅保留本模组的生成遗物。"
 }

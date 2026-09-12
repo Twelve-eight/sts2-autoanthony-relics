@@ -1,6 +1,8 @@
 {
-  "settings_ui": {
-    "AUTOANTHONYRELICS-Enabled.title": "Enable Anthony Algorithm",
-    "AUTOANTHONYRELICS-Enabled.desc": "When on, the whole card pool is resampled with the Anthony algorithm at the start of each run. When off, the engine's native pool is used."
-  }
+  "AUTOANTHONYRELICS-ENABLED.title": "Enable Anthony Algorithm - Relics",
+  "AUTOANTHONYRELICS-ENABLED.hover.desc": "Master switch. When off: generated relics stop spawning, the reward pool returns to vanilla relics, and owned generated relics have no effect.",
+  "AUTOANTHONYRELICS-REPLACE_VANILLA_RELICS.title": "Replace Vanilla Relics",
+  "AUTOANTHONYRELICS-REPLACE_VANILLA_RELICS.hover.desc": "When on: vanilla relics are stripped from the run grab bag, so every reward source (combat, chests, shops, events) offers generated relics only. Ancients, starters, Neow and event-fixed relics are always untouched.",
+  "AUTOANTHONYRELICS-KEEP_MODDED_RELICS.title": "Keep Other Mods' Relics",
+  "AUTOANTHONYRELICS-KEEP_MODDED_RELICS.hover.desc": "When on: relics from other BaseLib mods (e.g. Qurious Crafting - Relics) stay in the pool alongside generated relics - install order does not matter. When off, only generated relics are kept."
 }
