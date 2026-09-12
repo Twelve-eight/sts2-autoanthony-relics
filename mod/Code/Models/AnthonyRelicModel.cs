@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using AutoAnthonyRelics.Generation;
 using BaseLib.Abstracts;
@@ -13,6 +14,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
@@ -115,6 +117,49 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         return System.IO.Path.Join(MainFile.ResPath, "images", "relics", "big", "relic.png");
     }
 
+    /// <summary>
+    /// Hover the RELIC -> also show a tooltip for every power it applies
+    /// (vanilla Akabeko pattern, user request 2026-09-13).
+    /// </summary>
+    protected override IEnumerable<IHoverTip> ExtraHoverTips
+    {
+        get
+        {
+            var definition = Definition;
+            if (definition is null)
+            {
+                yield break;
+            }
+            foreach (var effect in definition.Effects)
+            {
+                if (effect.Opcode != "apply_power")
+                {
+                    continue;
+                }
+                Type? powerType = effect.Variant switch
+                {
+                    "vigor" => typeof(VigorPower),
+                    "strength" => typeof(StrengthPower),
+                    "thorns" => typeof(ThornsPower),
+                    "vulnerable" => typeof(VulnerablePower),
+                    _ => null,
+                };
+                if (powerType is null)
+                {
+                    continue;
+                }
+                var tip = typeof(HoverTipFactory)
+                    .GetMethod(nameof(HoverTipFactory.FromPower))
+                    ?.MakeGenericMethod(powerType)
+                    .Invoke(null, null) as IHoverTip;
+                if (tip is not null)
+                {
+                    yield return tip;
+                }
+            }
+        }
+    }
+
     // ---------- Trigger hooks ----------
 
     public override async Task BeforeCombatStart()
@@ -149,8 +194,19 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         {
             return;
         }
-        Flash();
-        await ExecuteEffectsAsync(effects, owner);
+        // Enemy debuffs are ACCUMULATED across all generated relics and applied
+        // as ONE merged application at the owner's first turn start (user order
+        // 2026-09-13): separate low-count applications each burn one enemy
+        // Artifact charge. Only the vulnerable-all fragment is enemy-facing
+        // today; the bag is keyed by power type to stay extensible.
+        foreach (var effect in effects.Where(e => e.Opcode == "apply_power" && e.Variant == "vulnerable"))
+        {
+            AccumulateEnemyDebuff<VulnerablePower>(effect.Amount);
+        }
+        foreach (var effect in effects.Where(e => !(e.Opcode == "apply_power" && e.Variant == "vulnerable")))
+        {
+            await ExecuteEffectAsync(effect, owner);
+        }
     }
 
     /// <summary>turn_start (vanilla Lantern: energy survives here, not in BeforeCombatStart).</summary>
@@ -169,6 +225,10 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         if (!MatchesCondition(trigger!.Condition, owner))
         {
             return;
+        }
+        if (owner.PlayerCombatState?.TurnNumber <= 1)
+        {
+            await FlushEnemyDebuffs(owner);
         }
         Flash();
         await ExecuteEffectsAsync(effects, owner);
@@ -374,6 +434,56 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         }
     }
 
+    // ---------- Enemy-debuff merge (one Apply per power per combat) ----------
+
+    private static readonly object DebuffGate = new();
+    private static readonly Dictionary<Type, int> PendingEnemyDebuffs = new();
+
+    private void AccumulateEnemyDebuff<T>(int amount) where T : PowerModel
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+        lock (DebuffGate)
+        {
+            PendingEnemyDebuffs[typeof(T)] = PendingEnemyDebuffs.GetValueOrDefault(typeof(T)) + amount;
+        }
+    }
+
+    private static async Task FlushEnemyDebuffs(Player owner)
+    {
+        KeyValuePair<Type, int>[] pending;
+        lock (DebuffGate)
+        {
+            if (PendingEnemyDebuffs.Count == 0)
+            {
+                return;
+            }
+            pending = PendingEnemyDebuffs.ToArray();
+            PendingEnemyDebuffs.Clear();
+        }
+        var context = new ThrowingPlayerChoiceContext();
+        var enemies = owner.Creature.CombatState?.HittableEnemies ?? Array.Empty<Creature>();
+        if (enemies.Count == 0)
+        {
+            return;
+        }
+        foreach (var entry in pending)
+        {
+            var closed = s_vulnerableApply.MakeGenericMethod(entry.Key);
+            var task = (Task)closed.Invoke(null,
+                new object?[] { context, enemies, (decimal)entry.Value, owner.Creature, null })!;
+            await task;
+        }
+    }
+
+    private static readonly MethodInfo s_vulnerableApply =
+        typeof(PowerCmd).GetMethods()
+            .Single(m => m.Name == nameof(PowerCmd.Apply)
+                && m.IsGenericMethod
+                && m.GetParameters()[1].ParameterType == typeof(IEnumerable<Creature>));
+
     // ---------- Effect execution ----------
 
     private (Player? owner, TriggerFragment? trigger, IReadOnlyList<EffectFragment>? effects) Resolve(string kind)
@@ -391,6 +501,15 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     {
         var context = new ThrowingPlayerChoiceContext();
         foreach (EffectFragment effect in effects)
+        {
+            await ExecuteEffectAsync(effect, owner, context);
+        }
+    }
+
+    private async Task ExecuteEffectAsync(EffectFragment effect, Player owner,
+        ThrowingPlayerChoiceContext? context = null)
+    {
+        context ??= new ThrowingPlayerChoiceContext();
         {
             int amount = effect.Amount;
             switch (effect.Opcode, effect.Variant, effect.Target)

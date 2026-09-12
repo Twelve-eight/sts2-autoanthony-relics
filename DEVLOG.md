@@ -444,3 +444,11 @@ C.4 的一个额外收获: reference JSON 的 931 个 `SemanticId` 与池子的 
 
 进入一局: 掉落是否只出生成遗物、拾取→触发→存读档、双装 Qurious 混合池、
 控制台 `relic add AUTOANTHONYRELICS-ANTHONY_RELIC005`。
+
+## 2026-09-13 用户反馈轮 2 (东尼遗物侧)
+
+- 悬停浮窗: 遗物 ExtraHoverTips 为其 apply_power 片段 (勇气/力量/荆棘/易伤)
+  追加 HoverTipFactory.FromPower 提示。
+- 易伤合并: turn_start_early 触发的全体易伤不再每遗物立即施加, 累积进静态合并袋,
+  玩家第一回合开始时统一施加一次 (与 Qurious 同款机制, 各自聚合本 mod 遗物;
+  跨 mod 合并需第三方协调, 暂不做)。
