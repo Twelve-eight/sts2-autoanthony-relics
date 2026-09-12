@@ -452,3 +452,9 @@ C.4 的一个额外收获: reference JSON 的 931 个 `SemanticId` 与池子的 
 - 易伤合并: turn_start_early 触发的全体易伤不再每遗物立即施加, 累积进静态合并袋,
   玩家第一回合开始时统一施加一次 (与 Qurious 同款机制, 各自聚合本 mod 遗物;
   跨 mod 合并需第三方协调, 暂不做)。
+
+## 2026-09-13 紧急修复: 浮窗无法关闭 (同 Qurious 根因)
+
+ExtraHoverTips 的 GetMethod(name) 命中 FromPower 双重载抛 AmbiguousMatchException,
+OnFocus 枚举中途炸断 → NHoverTipSet 关闭注册缺失 → 详情浮窗滞留。
+改为显式泛型重载 (静态缓存)。已构建/部署/staging。
