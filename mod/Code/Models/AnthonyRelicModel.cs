@@ -229,13 +229,16 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         {
             return;
         }
-        if (!MatchesCondition(trigger!.Condition, owner))
-        {
-            return;
-        }
+        // Flush the merged debuff bag BEFORE this relic's own condition gate:
+        // the bag spans all generated relics, so the flush must not depend on
+        // any single relic's condition passing.
         if (owner.PlayerCombatState?.TurnNumber <= 1)
         {
             await FlushEnemyDebuffs(owner);
+        }
+        if (!MatchesCondition(trigger!.Condition, owner))
+        {
+            return;
         }
         Flash();
         await ExecuteEffectsAsync(effects, owner);
@@ -351,6 +354,29 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     public override async Task AfterCombatVictoryEarly(CombatRoom room)
     {
         var (owner, trigger, effects) = Resolve("combat_victory");
+        if (owner is null || effects is null)
+        {
+            return;
+        }
+        if (!MatchesCondition(trigger!.Condition, owner))
+        {
+            return;
+        }
+        Flash();
+        await ExecuteEffectsAsync(effects, owner);
+    }
+
+    /// <summary>combat_end trigger (ChosenCheese pattern). Also clears the
+    /// enemy-debuff merge bag: a combat that ends before the owner's first
+    /// turn start never reaches the flush point, and stale amounts must not
+    /// leak into the next fight.</summary>
+    public override async Task AfterCombatEnd(CombatRoom room)
+    {
+        var (owner, trigger, effects) = Resolve("combat_end");
+        lock (DebuffGate)
+        {
+            PendingEnemyDebuffs.Clear();
+        }
         if (owner is null || effects is null)
         {
             return;
