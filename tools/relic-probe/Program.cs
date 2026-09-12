@@ -168,6 +168,28 @@ internal static class Program
             Console.WriteLine($"    ZHS: {definition.DescriptionZhs}");
         }
 
+        // ---- 8. Soak: 200 seeds x 60 slots, all invariants, fragment reachability.
+        var usageTriggers = new HashSet<string>(StringComparer.Ordinal);
+        var usageEffects = new HashSet<string>(StringComparer.Ordinal);
+        bool soakShape = true;
+        for (int i = 0; i < 200; i++)
+        {
+            var run = RelicGenerator.Generate($"soak-{i}", pool);
+            if (run.Count != RelicGenerator.SlotCount) { soakShape = false; break; }
+            foreach (var d in run)
+            {
+                if (d.Trigger is not null) usageTriggers.Add(d.Trigger.Key);
+                foreach (var e in d.Effects) usageEffects.Add(e.Key);
+                if (d.Effects.Count == 0) { soakShape = false; }
+            }
+        }
+        Check(soakShape, "soak: 200 seeds, every slot well-formed");
+        Check(usageTriggers.Count == pool.Triggers.Count, "soak: every trigger fragment reachable",
+            $"{usageTriggers.Count}/{pool.Triggers.Count}");
+        Check(usageEffects.Count == pool.TriggeredEffects.Count + pool.PassiveEffects.Count,
+            "soak: every effect fragment reachable",
+            $"{usageEffects.Count}/{pool.TriggeredEffects.Count + pool.PassiveEffects.Count}");
+
         Console.WriteLine();
         Console.WriteLine(_failures == 0 ? "PROBE OK" : $"PROBE FAILED: {_failures} check(s)");
         return _failures == 0 ? 0 : 1;
