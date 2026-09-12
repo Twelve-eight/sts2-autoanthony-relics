@@ -1029,6 +1029,27 @@ if (chainCard != null)
 }
 
 Console.WriteLine();
+Console.WriteLine("--- D.0 card description (stage D acceptance) ---");
+if (chainCard != null)
+{
+    string zhsDesc = CardDescriber.Describe(chainCard, "zhs");
+    string engDesc = CardDescriber.Describe(chainCard, "eng");
+    Console.WriteLine("  zhs:");
+    Console.WriteLine("    " + zhsDesc.Replace("\n", "\n    "));
+    Console.WriteLine("  eng:");
+    Console.WriteLine("    " + engDesc.Replace("\n", "\n    "));
+
+    Check("zhs description contains trigger text", zhsDesc.Contains("每当你在回合内失去生命"), true);
+    Check("zhs description contains lose_hp effect", zhsDesc.Contains("失去"), true);
+    Check("eng description contains trigger text", engDesc.Contains("lose HP during your turn"), true);
+    Check("eng description contains lose_hp effect", engDesc.Contains("Lose"), true);
+}
+else
+{
+    Console.WriteLine("  SKIPPED (no chain card found)");
+}
+
+Console.WriteLine();
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures == 0 ? 0 : 1;
 
