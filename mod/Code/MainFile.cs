@@ -1,6 +1,6 @@
 using System;
 using System.Reflection;
-using AutoAnthonyRelics.Data;
+using AutoAnthonyRelics.Generation;
 using BaseLib.Config;
 using Godot;
 using HarmonyLib;
@@ -11,11 +11,13 @@ namespace AutoAnthonyRelics;
 /// <summary>
 /// Mod entry point.
 ///
-/// Stage A scope: register the config, apply Harmony patches, and load +
-/// validate the generation pool at startup. Loading the pool here is not
-/// busywork - it turns a broken embed (or a data revision with an opcode we do
-/// not know) into a startup log line instead of a mid-run failure on the first
-/// generated card.
+/// Startup loads the relic atom pool + the hand-audited ledger and builds the
+/// fragment pool once. The ledger is deny-by-default: atoms without a
+/// verified "supported" entry never reach the generator, so an extractor
+/// defect degrades the pool instead of corrupting it. The card-direction
+/// catalog (AnthonyCatalog / card recipe JSONs) is intentionally NOT loaded
+/// here: this build's product is relics, and a card-pool load must never read
+/// as relic initialization success.
 /// </summary>
 [ModInitializer(nameof(Initialize))]
 public partial class MainFile : Node
@@ -25,6 +27,10 @@ public partial class MainFile : Node
 
     public static MegaCrit.Sts2.Core.Logging.Logger Logger { get; } =
         new(ModId, MegaCrit.Sts2.Core.Logging.LogType.Generic);
+
+    /// <summary>Built once at startup; sampled by the generator, read by the host.</summary>
+    public static RelicFragmentPool FragmentPool { get; private set; } =
+        RelicFragmentPool.EmptyInstance;
 
     public static void Initialize()
     {
@@ -57,27 +63,20 @@ public partial class MainFile : Node
             }
             Logger.Info($"[{ModId}] Harmony: {patchedClasses} patch class(es) applied, {failedClasses} failed");
 
-            AnthonyCatalog catalog = AnthonyCatalog.Instance;
-            CatalogStats stats = catalog.Stats();
-            Logger.Info($"[{ModId}] pool loaded: {stats.RecipeCount} recipes, " +
-                        $"{stats.FragmentCount} fragments, {stats.SpecCount} specs, " +
-                        $"{stats.DistinctVariants} variants, {stats.DistinctOpcodeVariantPairs} opcode/variant pairs, " +
-                        $"characters: {string.Join("/", catalog.Characters)}");
+            // Relic data: atoms (extractor candidates) + ledger (hand-audited
+            // verdicts) -> independent trigger/effect fragment pools.
+            Data.RelicAtomPool atoms = Data.RelicAtomData.LoadAtoms();
+            Data.RelicLedger ledger = Data.RelicAtomData.LoadLedger();
+            FragmentPool = RelicFragmentPool.Build(atoms, ledger);
+            Logger.Info($"[{ModId}] relic pool: {atoms.Atoms.Count} extracted atoms, " +
+                        $"{ledger.Supported.Count} ledger-supported, {ledger.Rejected.Count} ledger-rejected; " +
+                        $"fragments: {FragmentPool.Triggers.Count} triggers, " +
+                        $"{FragmentPool.TriggeredEffects.Count} triggered effects, " +
+                        $"{FragmentPool.PassiveEffects.Count} passives");
 
-            CatalogValidation validation = catalog.Validate();
-            if (validation.Ok)
-            {
-                Logger.Info($"[{ModId}] pool validation: clean");
-            }
-            else
-            {
-                foreach (string problem in validation.Problems)
-                {
-                    Logger.Error($"[{ModId}] pool problem: {problem}");
-                }
-            }
-
-            Logger.Info($"[{ModId}] initialized: enabled={AutoAnthonyRelicsConfig.Enabled}");
+            Logger.Info($"[{ModId}] initialized: enabled={AutoAnthonyRelicsConfig.Enabled}, " +
+                        $"replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics}, " +
+                        $"keepModded={AutoAnthonyRelicsConfig.KeepModdedRelics}");
         }
         catch (Exception e)
         {

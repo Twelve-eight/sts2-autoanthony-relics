@@ -1,0 +1,3086 @@
+{
+ "schema": "relic-atoms/v1",
+ "source": "MegaCrit.Sts2.Core.Models.Relics (engine decompile)",
+ "atomCount": 140,
+ "atoms": [
+  {
+   "Id": "Akabeko#AfterSideTurnStart#0",
+   "Source": "Akabeko",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "vigor",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 8,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "AlchemicalCoffer#AfterObtained#0",
+   "Source": "AlchemicalCoffer",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_max_potion",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Anchor#BeforeCombatStart#0",
+   "Source": "Anchor",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 10,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "combat_start",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "ArtOfWar#AfterEnergyReset#0",
+   "Source": "ArtOfWar",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "BagOfMarbles#BeforeSideTurnStart#0",
+   "Source": "BagOfMarbles",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "vulnerable",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "BagOfPreparation#ModifyHandDraw",
+   "Source": "BagOfPreparation",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "BigMushroom#AfterObtained#0",
+   "Source": "BigMushroom",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 20,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "BigMushroom#ModifyHandDraw",
+   "Source": "BigMushroom",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "BlackBlood#AfterCombatVictory#0",
+   "Source": "BlackBlood",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 12,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "target_dead"
+    },
+    "Trigger": {
+     "Kind": "combat_victory",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "BlessedAntler#ModifyMaxEnergy",
+   "Source": "BlessedAntler",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "BloodSoakedRose#ModifyMaxEnergy",
+   "Source": "BloodSoakedRose",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "BloodVial#AfterPlayerTurnStartLate#0",
+   "Source": "BloodVial",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "BoomingConch#AfterSideTurnStart#0",
+   "Source": "BoomingConch",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "BoomingConch#ModifyHandDraw",
+   "Source": "BoomingConch",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "Bread#ModifyMaxEnergy",
+   "Source": "Bread",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "Brimstone#AfterSideTurnStart#0",
+   "Source": "Brimstone",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Brimstone#AfterSideTurnStart#1",
+   "Source": "Brimstone",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "BronzeScales#AfterRoomEntered#0",
+   "Source": "BronzeScales",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "thorns",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "BurningBlood#AfterCombatVictory#0",
+   "Source": "BurningBlood",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 6,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "target_dead"
+    },
+    "Trigger": {
+     "Kind": "combat_victory",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Candelabra#AfterSideTurnStart#0",
+   "Source": "Candelabra",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "CaptainsWheel#AfterBlockCleared#0",
+   "Source": "CaptainsWheel",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 18,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "block_cleared",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "CentennialPuzzle#AfterDamageReceived#0",
+   "Source": "CentennialPuzzle",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "draw_cards",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "damage_received",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Chandelier#AfterSideTurnStart#0",
+   "Source": "Chandelier",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "CharonsAshes#AfterCardExhausted#0",
+   "Source": "CharonsAshes",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_exhausted",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "ChosenCheese#AfterCombatEnd#0",
+   "Source": "ChosenCheese",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "combat_end",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "CloakClasp#BeforeSideTurnEnd#0",
+   "Source": "CloakClasp",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_end",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "CrackedCore#BeforeSideTurnStart#0",
+   "Source": "CrackedCore",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "channel_orb",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "CursedPearl#AfterObtained#0",
+   "Source": "CursedPearl",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_gold",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 333,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "DarkstonePeriapt#AfterCardChangedPiles#0",
+   "Source": "DarkstonePeriapt",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 6,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_moved",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "DataDisk#AfterRoomEntered#0",
+   "Source": "DataDisk",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "focus",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "DaughterOfTheWind#AfterCardPlayed#0",
+   "Source": "DaughterOfTheWind",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "DemonTongue#AfterDamageReceived#0",
+   "Source": "DemonTongue",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "damage_received",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "DiamondDiadem#AfterSideTurnStart#0",
+   "Source": "DiamondDiadem",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "DiamondDiadem#AfterSideTurnStart#1",
+   "Source": "DiamondDiadem",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "blur",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "DivineDestiny#AfterSideTurnStart#0",
+   "Source": "DivineDestiny",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "gain_stars",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 7,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "DivineRight#AfterRoomEntered#0",
+   "Source": "DivineRight",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "gain_stars",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "DragonFruit#AfterGoldGained#0",
+   "Source": "DragonFruit",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "gold_gained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Ectoplasm#ModifyMaxEnergy",
+   "Source": "Ectoplasm",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "EternalFeather#AfterRoomEntered#0",
+   "Source": "EternalFeather",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 5,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "FakeAnchor#BeforeCombatStart#0",
+   "Source": "FakeAnchor",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 4,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "combat_start",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "FakeBloodVial#AfterPlayerTurnStartLate#0",
+   "Source": "FakeBloodVial",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "FakeLeesWaffle#AfterObtained#0",
+   "Source": "FakeLeesWaffle",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 10,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "FakeMango#AfterObtained#0",
+   "Source": "FakeMango",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "FakeOrichalcum#BeforeSideTurnEnd#0",
+   "Source": "FakeOrichalcum",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_end",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "FestivePopper#AfterPlayerTurnStart#0",
+   "Source": "FestivePopper",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 9,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Fiddle#ModifyHandDraw",
+   "Source": "Fiddle",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "ForgottenSoul#AfterCardExhausted#0",
+   "Source": "ForgottenSoul",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_exhausted",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "FragrantMushroom#AfterObtained#0",
+   "Source": "FragrantMushroom",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "selected_enemy",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 15,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "GamePiece#AfterCardPlayed#0",
+   "Source": "GamePiece",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "draw_cards",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "GoldenPearl#AfterObtained#0",
+   "Source": "GoldenPearl",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_gold",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 150,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Gorget#AfterRoomEntered#0",
+   "Source": "Gorget",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "plating",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 4,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "GremlinHorn#AfterDeath#0",
+   "Source": "GremlinHorn",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "creature_died",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "GremlinHorn#AfterDeath#1",
+   "Source": "GremlinHorn",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "draw_cards",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "creature_died",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "HandDrill#AfterBlockBroken#0",
+   "Source": "HandDrill",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "vulnerable",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "block_broken",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "HelicalDart#AfterCardPlayed#0",
+   "Source": "HelicalDart",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "helicaldart",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "HornCleat#AfterBlockCleared#0",
+   "Source": "HornCleat",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 14,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "block_cleared",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "InfusedCore#AfterSideTurnStart#0",
+   "Source": "InfusedCore",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "channel_orb",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "IntimidatingHelmet#BeforeCardPlayed#0",
+   "Source": "IntimidatingHelmet",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "IvoryTile#AfterCardPlayed#0",
+   "Source": "IvoryTile",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Kunai#AfterCardPlayed#0",
+   "Source": "Kunai",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "dexterity",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Kusarigama#AfterCardPlayed#0",
+   "Source": "Kusarigama",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Lantern#AfterSideTurnStart#0",
+   "Source": "Lantern",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "LeafyPoultice#AfterObtained#0",
+   "Source": "LeafyPoultice",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "lose_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 12,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "LeesWaffle#AfterObtained#0",
+   "Source": "LeesWaffle",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 7,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "LeesWaffle#AfterObtained#1",
+   "Source": "LeesWaffle",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 7,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "LetterOpener#AfterCardPlayed#0",
+   "Source": "LetterOpener",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "LoomingFruit#AfterObtained#0",
+   "Source": "LoomingFruit",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 31,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "LostWisp#AfterCardPlayed#0",
+   "Source": "LostWisp",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 8,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "LuckyFysh#AfterCardChangedPiles#0",
+   "Source": "LuckyFysh",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_gold",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 15,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_moved",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "LunarPastry#AfterSideTurnEnd#0",
+   "Source": "LunarPastry",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_stars",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_end",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Mango#AfterObtained#0",
+   "Source": "Mango",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 14,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "MealTicket#AfterRoomEntered#0",
+   "Source": "MealTicket",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 15,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "target_dead"
+    },
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "MeatOnTheBone#AfterCombatVictoryEarly#0",
+   "Source": "MeatOnTheBone",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 12,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "target_dead"
+    },
+    "Trigger": {
+     "Kind": "combat_victory",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "MercuryHourglass#AfterPlayerTurnStart#0",
+   "Source": "MercuryHourglass",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Metronome#AfterOrbChanneled#0",
+   "Source": "Metronome",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "orb_channeled",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "MiniRegent#AfterStarsSpent#0",
+   "Source": "MiniRegent",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "stars_spent",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "MrStruggles#AfterPlayerTurnStart#0",
+   "Source": "MrStruggles",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "NutritiousOyster#AfterObtained#0",
+   "Source": "NutritiousOyster",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 11,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "OddlySmoothStone#AfterRoomEntered#0",
+   "Source": "OddlySmoothStone",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "dexterity",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "OldCoin#AfterObtained#0",
+   "Source": "OldCoin",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_gold",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 300,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Orichalcum#BeforeSideTurnEnd#0",
+   "Source": "Orichalcum",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 6,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_end",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "OrnamentalFan#AfterCardPlayed#0",
+   "Source": "OrnamentalFan",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "PaelsBlood#ModifyHandDraw",
+   "Source": "PaelsBlood",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "PaelsFlesh#ModifyMaxEnergy",
+   "Source": "PaelsFlesh",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "PaelsTears#AfterSideTurnStart#0",
+   "Source": "PaelsTears",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Pantograph#BeforeCombatStart#0",
+   "Source": "Pantograph",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 25,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "target_dead"
+    },
+    "Trigger": {
+     "Kind": "combat_start",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "ParryingShield#AfterSideTurnEnd#0",
+   "Source": "ParryingShield",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 10,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_end",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Pear#AfterObtained#0",
+   "Source": "Pear",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 10,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Permafrost#AfterCardPlayed#0",
+   "Source": "Permafrost",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 7,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "PhialHolster#AfterObtained#0",
+   "Source": "PhialHolster",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_max_potion",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "PhilosophersStone#AfterRoomEntered#0",
+   "Source": "PhilosophersStone",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "PhilosophersStone#ModifyMaxEnergy",
+   "Source": "PhilosophersStone",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "PhylacteryUnbound#BeforeCombatStart#0",
+   "Source": "PhylacteryUnbound",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "summon_osty",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "combat_start",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "PhylacteryUnbound#AfterSideTurnStart#1",
+   "Source": "PhylacteryUnbound",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "summon_osty",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Planisphere#AfterRoomEntered#0",
+   "Source": "Planisphere",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "heal",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 5,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "target_dead"
+    },
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Pocketwatch#ModifyHandDraw",
+   "Source": "Pocketwatch",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "PotionBelt#AfterObtained#0",
+   "Source": "PotionBelt",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "gain_max_potion",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "PrecariousShears#AfterObtained#0",
+   "Source": "PrecariousShears",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "selected_enemy",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "PrismaticGem#ModifyMaxEnergy",
+   "Source": "PrismaticGem",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "RainbowRing#AfterCardPlayed#0",
+   "Source": "RainbowRing",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "RainbowRing#AfterCardPlayed#1",
+   "Source": "RainbowRing",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "dexterity",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "RedMask#BeforeSideTurnStart#0",
+   "Source": "RedMask",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "weak",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "RegalPillow#ModifyRestSiteHealAmount",
+   "Source": "RegalPillow",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "modify_rest_heal",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 15,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "ReptileTrinket#AfterPotionUsed#0",
+   "Source": "ReptileTrinket",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "reptiletrinket",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "potion_used",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "RingOfTheDrake#ModifyHandDraw",
+   "Source": "RingOfTheDrake",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "RingOfTheSnake#ModifyHandDraw",
+   "Source": "RingOfTheSnake",
+   "Rarity": "Starter",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "RippleBasin#BeforeSideTurnEnd#0",
+   "Source": "RippleBasin",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 4,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_end",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "RoyalPoison#AfterPlayerTurnStart#0",
+   "Source": "RoyalPoison",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "selected_enemy",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 4,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "Sai#AfterSideTurnStart#0",
+   "Source": "Sai",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 7,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "ScreamingFlagon#BeforeSideTurnEnd#0",
+   "Source": "ScreamingFlagon",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 20,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_end",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "SealOfGold#AfterSideTurnStart#0",
+   "Source": "SealOfGold",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "SelfFormingClay#AfterDamageReceived#0",
+   "Source": "SelfFormingClay",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "selfformingclay",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "damage_received",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "SereTalon#AfterObtained#0",
+   "Source": "SereTalon",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "lose_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 9,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Shuriken#AfterCardPlayed#0",
+   "Source": "Shuriken",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_played",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "SignetRing#AfterObtained#0",
+   "Source": "SignetRing",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_gold",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 888,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "SlingOfCourage#AfterRoomEntered#0",
+   "Source": "SlingOfCourage",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "SneckoEye#ModifyHandDraw",
+   "Source": "SneckoEye",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_hand_draw",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "SneckoSkull#ModifyPowerAmountGivenAdditive",
+   "Source": "SneckoSkull",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "modify_power_given",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "Sozu#ModifyMaxEnergy",
+   "Source": "Sozu",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "SparklingRouge#AfterBlockCleared#0",
+   "Source": "SparklingRouge",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "block_cleared",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "SparklingRouge#AfterBlockCleared#1",
+   "Source": "SparklingRouge",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "dexterity",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "block_cleared",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "SpikedGauntlets#ModifyMaxEnergy",
+   "Source": "SpikedGauntlets",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "StoneCalendar#BeforeSideTurnEnd#0",
+   "Source": "StoneCalendar",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_end",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "StoneHumidifier#AfterRestSiteHeal#0",
+   "Source": "StoneHumidifier",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 5,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "rest_site_heal",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Strawberry#AfterObtained#0",
+   "Source": "Strawberry",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "gain_max_hp",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 7,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "SwordOfJade#AfterRoomEntered#0",
+   "Source": "SwordOfJade",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "SymbioticVirus#AfterSideTurnStart#0",
+   "Source": "SymbioticVirus",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "channel_orb",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "TheAbacus#AfterShuffle#0",
+   "Source": "TheAbacus",
+   "Rarity": "Shop",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 6,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "shuffle",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "TheBoot#ModifyHpLostAfterOstyLate",
+   "Source": "TheBoot",
+   "Rarity": "Event",
+   "Spec": {
+    "Opcode": "modify_osty_hp_loss",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "ThrowingAxe#ModifyCardPlayCount",
+   "Source": "ThrowingAxe",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_card_play_count",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "Tingsha#AfterCardDiscarded#0",
+   "Source": "Tingsha",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "lose_hp",
+    "Variant": "immediate",
+    "Target": "all_enemies",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_discarded",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "ToastyMittens#AfterPlayerTurnStart#0",
+   "Source": "ToastyMittens",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "ToughBandages#AfterCardDiscarded#0",
+   "Source": "ToughBandages",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "gain_block",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "card_discarded",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "TwistedFunnel#BeforeSideTurnStart#0",
+   "Source": "TwistedFunnel",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "poison",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 4,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "not_first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "UnceasingTop#AfterHandEmptied#0",
+   "Source": "UnceasingTop",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "draw_cards",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "hand_emptied",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "UnsettlingLamp#ModifyPowerAmountGivenMultiplicative",
+   "Source": "UnsettlingLamp",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "modify_power_given",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "Vajra#AfterRoomEntered#0",
+   "Source": "Vajra",
+   "Rarity": "Common",
+   "Spec": {
+    "Opcode": "apply_power",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "room_entered",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "VelvetChoker#ModifyMaxEnergy",
+   "Source": "VelvetChoker",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "VeryHotCocoa#AfterSideTurnStart#0",
+   "Source": "VeryHotCocoa",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "gain_energy",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 4,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "first_turn"
+    },
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "WhisperingEarring#ModifyMaxEnergy",
+   "Source": "WhisperingEarring",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_max_energy",
+    "Variant": "passive",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  }
+ ]
+}

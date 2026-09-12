@@ -9,14 +9,32 @@ namespace AutoAnthonyRelics;
 /// BaseLib's Slugify produces, because the loc key is
 /// {ModPrefix}Slugify(propertyName).title and that slugifier is lossy on
 /// ALL_CAPS_SNAKE (QuriousCraftingRelics measured 145/152 broken names before
-/// the fix). Single-word names are the safest: "Enabled" slugifies to itself.
+/// the fix). Camel-case multi-word names are safe; single-word safest.
 ///
-/// MP DETERMINISM: everything here feeds the seeded generator, so both ends
-/// must agree. These are Tier-1 keys in the sts2-mpconfigsync sense.
+/// MP DETERMINISM: NOTHING here participates in generation. Definitions are a
+/// pure function of (mod id, version, run seed, slot), so both multiplayer
+/// ends regenerate the identical relic set from the engine-synced seed even
+/// if toggles differ. These toggles only gate whether the mod acts locally.
+/// That is the structural fix for the live-config-in-definition-key defect
+/// class (astra-advice item 5 / Qurious fingerprint cache).
 /// </summary>
 [ConfigHoverTipsByDefault]
 internal class AutoAnthonyRelicsConfig : SimpleModConfig
 {
     /// <summary>Master switch. When false, the engine's native pool is left alone.</summary>
     public static bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// When true, vanilla relics are stripped from the run grab bag so
+    /// generated relics replace the drop pool (user order: output = relics).
+    /// </summary>
+    public static bool ReplaceVanillaRelics { get; set; } = true;
+
+    /// <summary>
+    /// When true, other mods' BaseLib custom relics stay in the grab bag
+    /// (Qurious coexistence, astra-advice note 9). Both mods installed with
+    /// defaults -> one mixed pool of Qurious + Anthony relics, no order
+    /// dependence: each mod's patch keeps every CustomRelicModel.
+    /// </summary>
+    public static bool KeepModdedRelics { get; set; } = true;
 }

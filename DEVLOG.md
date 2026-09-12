@@ -343,3 +343,67 @@ C.4 的一个额外收获: reference JSON 的 931 个 `SemanticId` 与池子的 
 (`combat_rule` 21 + Ironclad 的 template variant) 以便 D 的样例卡有完整可执行语义,
 再做阶段 D 的渲染与实机验收。
 
+
+---
+
+## 2026-09-12 (夜) 遗物垂直切片: 宿主 + 账本 + 生成器 + 部署 (主会话单线)
+
+用户指令: 两个遗物 mod 优先可游玩; subagent 全部停用, 主会话单线推进。
+
+本节对应 astra-advice (2026-09-12) 对本项目的三条 P1 (AAR-1/2/3) 的**垂直切片回应**:
+不是全部返工完成, 而是先跑通一条完整遗物路径 (审查建议第三步)。
+
+### 架构 (全部新建, 与卡牌主线并存未删)
+
+- `research/relic_atom_ledger.json`: **deny-by-default 原子账本**。25 条 supported
+  (每条带六项对账证据 + 必要的修正: 值/正负号/目标/条件/触发), 26 条 rejected
+  (逐条原因: 阈值状态/条件丢失/RNG 目标/古遗物等)。提取器输出未经账本确认不得进池。
+- `mod/Code/Data/RelicAtomData.cs`: 原子+账本加载 (嵌入资源, 探针可无 Godot 读取)。
+- `mod/Code/Generation/RelicFragments.cs`: 片段拆分——触发片段 (Kind+Condition) 与
+  效果片段 (opcode/variant/target/values) **独立成池**; 被动原子的条件挂在效果上。
+  Key 含数值 (修复: 曾按形状去重把 4/10/14/18 四种格挡折叠成 1 个)。
+- `mod/Code/Generation/RelicGenerator.cs`: 60 槽, **定义 = 纯函数 (modId, 版本串,
+  run seed, slot)**, 配置零参与 (结构性修掉 Qurious 的 live-config-进定义键缺陷类);
+  splitmix64 每槽独立流; 30% 双效果; 15% 纯被动; 金币递归禁配
+  (gold_gained 触发 × gain_gold 效果); 运行内指纹/名字去重。
+- `mod/Code/AnthonyRelicRunRegistry.cs` + `Patches/RunSeedCapturePatch.cs`:
+  种子捕获 (SetUpNew*/Launch 双点, Qurious 模式) + 按 seed 缓存。
+- `mod/Code/Models/AnthonyRelicModel.cs`: 宿主。11 个事件钩子 + ModifyHandDraw,
+  全部 owner 自门控; 条件求值全为无状态 (first_turn/turn_equals/hp_below_half/
+  hand_empty/no_attack_played_this_turn/card_type_power/enemy_side); 执行器
+  12 种效果 (PowerCmd/CreatureCmd/PlayerCmd/CardPileCmd), 未知 opcode/condition
+  **抛异常**不静默; 时序契约沿用 Qurious 实机结论 (能量在 AfterSideTurnStart、
+  首回合抽牌走 ModifyHandDraw、战前格挡留 BeforeCombatStart)。
+- `mod/Code/Models/AnthonyRelicSlots.cs`: 60 个槽位类 (每槽独立 ModelId,
+  池/存档/去重都挂在 model id 上)。
+- `mod/Code/Patches/AnthonyRelicGrabBagPatch.cs`: RelicGrabBag.Populate 后缀,
+  剥离非 CustomRelicModel。**共存谓词 = "是 BaseLib 自定义遗物"**: 与 Qurious
+  同装时两个补丁互相保留对方家族, 无顺序依赖 (astra-advice 注 9)。
+- 文案: `RelicText.cs` en+zhs 双语 (触发/条件/效果/名库), 按 TranslationServer
+  locale 选择; 图标为共享占位 PNG (缺失回退, Qurious 模式)。
+
+### 验证 (组件/集成层, 全部本轮实跑)
+
+- 隔离构建 (ModsPath→sink, 未触实机): `0 警告 / 0 错误` + PCK。
+- `tools/relic-probe` **24/24 PASS** (PROBE OK): 账本 25+26 计数; 全片段双语渲染;
+  执行器漂移零; BagOfMarbles=全体1易伤 / BigMushroom=-2抽牌 / Vajra=1力量 /
+  PotionBelt=2栏位 修正到位; 同 seed 两次生成逐字节一致; 异 seed 不同;
+  60 槽形状/名字唯一/三稀有度齐; 金币递归零配对; 跨来源重组占绝对主导。
+  样例: "At the end of each combat, draw 1 card." (ChosenCheese 触发 × GamePiece
+  效果) —— 触发与效果确实来自不同遗物。
+
+### 未验证边界 (需要实机, 不可由探针替代)
+
+1. Harmony 补丁实机挂载 (grab bag 两个 Populate 重载的 TargetMethod 解析)。
+2. 获取→持有→触发→存读档 全流程; 抽卡/事件/商店实际掉落。
+3. 联机: 定义纯种子函数 + 引擎种子同步 ⇒ 预期两端一致, 未双端实测。
+4. 与 Qurious 同装 (本机当前只装了 Qurious): 需先修 Qurious cfg 迁移
+  (它会搬走本 mod 的 AutoAnthonyRelics.cfg), 再双开验证池共存。
+5. turn_start 统一映射 AfterSideTurnStart (BloodVial 原 PlayerTurnStartLate):
+   单人观测等价, MP 侧时序差异未验证 —— 账本已注明。
+
+### 状态
+
+已部署实机 `mods/AutoAnthonyRelics/` (游戏未运行, 无锁)。卡牌主线代码
+(Generation/Card*, Interpretation/*) 保留未删, MainFile 不再加载卡牌 catalog
+(审查第二步要求)。git: 本节落盘后提交推送。

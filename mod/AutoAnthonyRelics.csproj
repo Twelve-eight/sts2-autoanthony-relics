@@ -51,6 +51,8 @@
     <ItemGroup>
         <EmbeddedResource Include="Code/Data/Json/catalog_recipes.json" />
         <EmbeddedResource Include="Code/Data/Json/catalog_runtime_specs.json" />
+        <EmbeddedResource Include="Code/Data/Json/relic_atoms.json" />
+        <EmbeddedResource Include="Code/Data/Json/relic_atom_ledger.json" />
     </ItemGroup>
 
     <ItemGroup>
