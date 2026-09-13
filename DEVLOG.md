@@ -458,3 +458,20 @@ C.4 的一个额外收获: reference JSON 的 931 个 `SemanticId` 与池子的 
 ExtraHoverTips 的 GetMethod(name) 命中 FromPower 双重载抛 AmbiguousMatchException,
 OnFocus 枚举中途炸断 → NHoverTipSet 关闭注册缺失 → 详情浮窗滞留。
 改为显式泛型重载 (静态缓存)。已构建/部署/staging。
+
+---
+
+## 附: 会话输入与工作顺序 (2026-09-12~13, 全量见 docs/session-log-2026-09-12-13.md)
+
+与本仓库直接相关的用户输入序列:
+1. 「东尼算法遗物最先/两个遗物mod尽快可游玩」→ 垂直切片 (账本→生成器→宿主→部署, bc14407)。
+2. 「上架工坊的一切工作」→ 新条目 staging 全套 (59429fc 前)。
+3. 「设置页应在原版东尼算法同级,不应在baselib里」→ 独立设置页移植 (59429fc)。
+4. 「姿态效果应包括回合数(平静T1/愤怒T2/神格T3)」+「附魔两形态并存」→ 回合调度 + 同附魔叠级
+   + X_PICKUP_* 三词条 (b902804 前多提交)。
+5. 「悬停应显示增减益详细描述」→ ExtraHoverTips (e0ac107)。
+6. 「浮窗关不掉了!」→ AmbiguousMatchException 修复 (96dbd92)。
+7. 「审查所有构建代码」→ 补 combat_end 钩子 (原缺失, 词条失效) + 冲刷移出条件门 (1bbb148)。
+8. GPT6-Astra 二轮 → 合并袋按 owner NetId 分键 + registry 指纹键 (b902804)。
+教训要点: L4 反射唯一性 / L7 静态状态生命周期 (combat_end 漏发=词条静默失效) /
+L2 用户报告优先。详见 docs/session-log-2026-09-12-13.md 第二节。
