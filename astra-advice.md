@@ -1,3 +1,27 @@
+## 第二轮复审 (2026-09-13)
+
+当前 `tools/relic-probe` 通过: 140 atoms, 25 supported/26 rejected, bilingual render, executor coverage, corrected values, 60 slots, same-seed determinism, 200-seed soak and trigger/effect reachability. 当前隔离构建 exit 0, 0 warning/0 error. 这仍是 pure data/generator evidence, 未覆盖真实 RelicCmd.Obtain,持有回调,存档,MP 和 Godot UI.
+
+### P2 AAR-4: seed-only cache identity is not sufficient
+
+`AnthonyRelicRunRegistry.cs:18-39` uses only `runSeed` as the cache key, but `RelicGenerator.Generate(runSeed,pool)` depends on `RelicFragmentPool`; `RelicGenerator.SeedVersion` is hardcoded as `relics-v1`. A ledger/catalog/pool change or algorithm change without a version bump can make the same seed mean a different 60-slot set while the process cache returns the old set. Add catalog/ledger/algorithm identity to the key, or persist exact generated definitions/effective inputs in the run save. Same-process same-seed output is not cross-build or save-load proof.
+
+### P2 AAR-5: trigger source multiplicity is collapsed
+
+`Generation/RelicFragments.cs:95-157` stores triggers by `TriggerFragment.Key`, which is only `Kind|Condition`. Multiple supported source atoms with the same trigger semantics become one candidate, while `SupportedAtomCount` still reports all ledger entries. This changes sampling weight unless semantic-shape weighting is explicitly intended. Decide and document atom-weight versus shape-weight semantics; make the pool identity/probe reflect that choice.
+
+### P2 AAR-6: enemy-debuff merge state is process-global
+
+`Models/AnthonyRelicModel.cs:470-512` uses a static `PendingEnemyDebuffs` dictionary keyed only by power type. It clears on combat end and flushes on first turn start, but carries no player/run/combat identity. If overlapping combat contexts or multiple run instances can invoke these hooks before flush, one owner's contributions can be applied to another owner's enemies. No real multi-combat reproduction was run; the source ownership boundary is insufficiently explicit. Key state by combat/owner or store it on the owning run/combat context, then test combat-end-before-first-turn and two owners.
+
+### P2 AAR-7: seed lifecycle cleanup is absent from the current read set
+
+`RunSeedCapturePatch.cs` captures on new singleplayer, new multiplayer and `Launch`, but no current `RunManager.CleanUp` patch was found for `AnthonyRelicRunRegistry.CurrentRunSeed`. The comment says the registry tracks the active run, but a post-run menu or next run can observe stale process-global seed state. Prove and implement the cleanup contract before calling `CurrentRunSeed` run-scoped.
+
+### 仍需真实验证
+
+No real obtain/trigger/save-load/reload/reconnect/multiplayer or settings interaction was run. The probe's deterministic output must not be upgraded to relic gameplay acceptance.
+
 # Astra advice - AutoAnthonyRelics 返工方向与语义验收
 
 日期: 2026-09-12. 主会话单线评估. 本文是建议, 未实现返工, 未改产品代码, 未发布.
