@@ -633,3 +633,11 @@ astra 第三轮复审落盘 (根 `astra-advice.md` + 各项目 `astra-advice.md`
 
 ### L30 (教训)
 "修一处译名错误后跨全工作区 grep" 的 "工作区" 必须包含**用户可见发布工件** (workshop_upload.vdf 描述、json 描述字段、pck 内文本), 不只是代码与本地化源。工坊描述是仅次于游戏内文本的术语暴露面, 而且在首次上传后每次改动都要走工坊审核。
+
+## 2026-09-14 astra 第三轮审查交接记录
+
+第三轮证据在 `v0.1.4` 提交前截取. 当时 `relic-probe` 通过 140 atoms, 25 supported, 26 rejected, 60 slots, 同 seed 一致性和 200 seeds soak; 审查仍把 SeedVersion 缺失, CleanUp 和 owner-0 作用域列为待闭合, 并错误记录了过时 Debug DLL 的 `勇气` 样例.
+
+随后当前仓库已出现 `c8aa7ab v0.1.4`: cache key 加入 `RelicGenerator.SeedVersion`, 新增 CleanUp reset, owner-0 可达性契约和发布文本更正. 因此第三轮 `anthony-relic-probe.txt` 的生成通过结果仍可用, 但不能证明 v0.1.4 的新路径. 下一轮必须以 v0.1.4 重建并复跑新鲜度守卫, 再覆盖真实遗物获得, combat, save/load, rejoin, CleanUp 和工坊发布物.
+
+术语恢复: Vigor 的权威译名是 `活力`, 不是 `勇气`. 证据与截点记录在 `G:\\omp works\\astra-advice-evidence\\2026-09-14\\handoff-state.json`.
