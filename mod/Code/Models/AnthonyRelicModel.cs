@@ -208,7 +208,7 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         // today; the bag is keyed by power type to stay extensible.
         foreach (var effect in effects.Where(e => e.Opcode == "apply_power" && e.Variant == "vulnerable"))
         {
-            AccumulateEnemyDebuff<VulnerablePower>(effect.Amount);
+            AccumulateEnemyDebuff<VulnerablePower>(owner, effect.Amount);
         }
         foreach (var effect in effects.Where(e => !(e.Opcode == "apply_power" && e.Variant == "vulnerable")))
         {
@@ -470,9 +470,15 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     // ---------- Enemy-debuff merge (one Apply per power per combat) ----------
 
     private static readonly object DebuffGate = new();
-    private static readonly Dictionary<Type, int> PendingEnemyDebuffs = new();
+    // Keyed by OWNER IDENTITY (second-round review, 2026-09-13): in
+    // multiplayer every client hosts relic instances for ALL players, and a
+    // process-global bag would merge two players' debuffs into whoever's
+    // turn start flushes first. ulong 0 = single-player fallback.
+    private static readonly Dictionary<ulong, Dictionary<Type, int>> PendingEnemyDebuffs = new();
 
-    private void AccumulateEnemyDebuff<T>(int amount) where T : PowerModel
+    private static ulong OwnerKey(Player? owner) => owner?.NetId ?? 0;
+
+    private void AccumulateEnemyDebuff<T>(Player owner, int amount) where T : PowerModel
     {
         if (amount <= 0)
         {
@@ -480,7 +486,10 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         }
         lock (DebuffGate)
         {
-            PendingEnemyDebuffs[typeof(T)] = PendingEnemyDebuffs.GetValueOrDefault(typeof(T)) + amount;
+            var bag = PendingEnemyDebuffs.TryGetValue(OwnerKey(owner), out var existing)
+                ? existing
+                : (PendingEnemyDebuffs[OwnerKey(owner)] = new Dictionary<Type, int>());
+            bag[typeof(T)] = bag.GetValueOrDefault(typeof(T)) + amount;
         }
     }
 
@@ -489,12 +498,13 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         KeyValuePair<Type, int>[] pending;
         lock (DebuffGate)
         {
-            if (PendingEnemyDebuffs.Count == 0)
+            if (!PendingEnemyDebuffs.TryGetValue(OwnerKey(owner), out var bag)
+                || bag.Count == 0)
             {
                 return;
             }
-            pending = PendingEnemyDebuffs.ToArray();
-            PendingEnemyDebuffs.Clear();
+            pending = bag.ToArray();
+            PendingEnemyDebuffs.Remove(OwnerKey(owner));
         }
         var context = new ThrowingPlayerChoiceContext();
         var enemies = owner.Creature.CombatState?.HittableEnemies ?? Array.Empty<Creature>();

@@ -68,6 +68,9 @@ public sealed class RelicFragmentPool
     public IReadOnlyList<EffectFragment> PassiveEffects { get; }
     public int SupportedAtomCount { get; }
 
+    /// <summary>Stable fingerprint of the fragment pool contents (cache-key input).</summary>
+    public string Fingerprint { get; }
+
     private RelicFragmentPool(IReadOnlyList<TriggerFragment> triggers,
         IReadOnlyList<EffectFragment> triggeredEffects,
         IReadOnlyList<EffectFragment> passiveEffects,
@@ -77,6 +80,12 @@ public sealed class RelicFragmentPool
         TriggeredEffects = triggeredEffects;
         PassiveEffects = passiveEffects;
         SupportedAtomCount = supportedAtomCount;
+        var sb = new System.Text.StringBuilder();
+        foreach (var t in triggers) sb.Append('T').Append(t.Key).Append(';');
+        foreach (var e in triggeredEffects) sb.Append('E').Append(e.Key).Append(';');
+        foreach (var e in passiveEffects) sb.Append('P').Append(e.Key).Append(';');
+        Fingerprint = System.Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(sb.ToString())))[..16];
     }
 
     /// <summary>
