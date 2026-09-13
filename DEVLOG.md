@@ -516,3 +516,47 @@ IsAllowed / 原版按替换开关; IsAllowed 增加片段池空守卫。
 构建 0 错误; 合并延迟部署守护（.tmp/deferred-deploy-combined.ps1）等游戏退出后补发
 mods/ 与 workshop/content/ 两处并校验哈希+版本。实机验证待用户: 遗物浮窗应显示本局
 生成的双语词条描述, 遗物图标应为逐槽不同的硬币图。
+
+## 2026-09-14 凌晨 - Act4 无法打牌/死亡不结算 根因与修复 (v0.1.2)
+
+### 用户报告
+「和mod "ACT 4 heart" 一起启用时，进入act4与精英怪-矛盾 boss-心脏战斗时会出现无法打牌，
+死亡后无法正常结算游戏的问题。」
+
+### 证据链 (godot.log 00:05 会话)
+- Combat #32 回合循环死亡: `TargetParameterCountException: Parameter count mismatch`
+  at `AnthonyRelicModel.FlushEnemyDebuffs ... :line 520` → `AfterSideTurnStart` →
+  `Hook.AfterSideTurnStart` → (WatcherHookCompat/RitsuLib 任务桥重放) → `CombatManager.StartTurn`。
+  → 敌方回合开始瞬间回合循环死亡, 战斗冻结, "无法打牌"。
+- Combat #35 回合循环死亡: `ObjectDisposedException: Godot.TextureRect` at
+  `Rewind.Scripts.RewindButton.ApplyButtonTint` — **Rewind mod** 在重开房间时对已释放控件
+  上色, 第三方缺陷 (从 #32 卡死后重开战斗的连锁触发)。
+- 死亡不结算: 用户放弃卡死局 → `RunManager.AbandonInternal → GuaranteeKillAllPlayers →
+  CreatureCmd.Kill → OnEnded → ProgressSaveManager.IncrementEncounterLoss(characterId,
+  encounterId)` 收到 null 键 → `ArgumentNullException` 中断结算。**下游连锁**: 正常死亡不走
+  这条路; 引擎/Act4Heart 在异常终止局上的结算脆弱点, 非我方代码。
+
+### 根因 (我方, 与 Act4Heart 无对抗关系)
+引擎 `PowerCmd.Apply<T>` (IEnumerable<Creature> 重载) 签名 6 参数:
+`(PlayerChoiceContext, IEnumerable<Creature>?, decimal, Creature?, CardModel?, bool silent = false)`。
+FlushEnemyDebuffs 的 `MethodInfo.Invoke` 只传了 5 参 — **Invoke 不填充可选参数默认值** →
+参数计数不匹配硬抛。凡持有开局群体减益 (易伤/虚弱/中毒) 词条的东尼遗物, 第一场战斗敌方
+回合开始必炸; Act4 精英"矛盾"/心脏只是这局恰好持有该词条遗物的战斗。Qurious 侧同逻辑
+传 6 参 (v0.5.3 debuff 合并时写对), 从未出过此错 — 直接对照修复。
+
+### 修复 (v0.1.2)
+1. Invoke 补第 6 参 `false` (显式, 不依赖可选默认)。
+2. 四个回合循环 await 钩子 (BeforeCombatStart / BeforeSideTurnStart / AfterSideTurnStart /
+   BeforeSideTurnEnd) 全部加 L21 保险丝: try/catch → ERROR 日志 + 吞掉 — 遗物效果缺陷
+   从"整场战斗报废"降级为"单次效果缺失+日志证据"。Qurious 0.5.4 已做, AAR 当时被
+   "无 UI 路径风险低"为由跳过 — 判断错误, 本缺陷即教训: **保险丝不问路径, 一律加**。
+
+构建 0 错误; deferred-deploy-aar-012.ps1 守护 (游戏运行中), 退出后自动补发 mods/ 与
+workshop/content/ 并校验哈希+版本。
+
+### 教训
+- L26: `MethodInfo.Invoke` 与 C# 可选参数是两个世界 — Invoke 要求参数个数与定义严格一致,
+  可选参数必须显式传。所有反射调用点逐一复核 (AAR 仅此一处多参调用; 155 行单参调用与
+  定义一致)。
+- L27: L21 保险丝的适用条件是"被引擎回合循环 await", 与是否开 UI 无关。同族代码
+  (Qurious/AAR 双实现) 必须同步施策, "另一边没出事"不代表另一边是对的。

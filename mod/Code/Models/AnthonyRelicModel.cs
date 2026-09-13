@@ -174,48 +174,65 @@ public abstract class AnthonyRelicModel : CustomRelicModel
 
     public override async Task BeforeCombatStart()
     {
-        var (owner, trigger, effects) = Resolve("combat_start");
-        if (owner is null || effects is null)
+        // Fuse (L21): this hook is awaited by the engine's turn loop; a throw
+        // here marks the combat permanently stuck. Log and degrade instead.
+        try
         {
-            return;
+            var (owner, trigger, effects) = Resolve("combat_start");
+            if (owner is null || effects is null)
+            {
+                return;
+            }
+            if (!MatchesCondition(trigger!.Condition, owner))
+            {
+                return;
+            }
+            Flash();
+            await ExecuteEffectsAsync(effects, owner);
         }
-        if (!MatchesCondition(trigger!.Condition, owner))
+        catch (Exception e)
         {
-            return;
+            MainFile.Logger.Error($"[{MainFile.ModId}] combat-start effect suppressed to keep the combat alive: {e}");
         }
-        Flash();
-        await ExecuteEffectsAsync(effects, owner);
     }
 
     /// <summary>turn_start_early (vanilla BagOfMarbles: BeforeSideTurnStart).</summary>
     public override async Task BeforeSideTurnStart(PlayerChoiceContext choiceContext, CombatSide side,
         IReadOnlyList<Creature> participants, ICombatState combatState)
     {
-        var (owner, trigger, effects) = Resolve("turn_start_early");
-        if (owner is null || effects is null)
+        // Fuse (L21): awaited by the engine's turn loop.
+        try
         {
-            return;
+            var (owner, trigger, effects) = Resolve("turn_start_early");
+            if (owner is null || effects is null)
+            {
+                return;
+            }
+            if (!participants.Contains(owner.Creature))
+            {
+                return;
+            }
+            if (!MatchesCondition(trigger!.Condition, owner))
+            {
+                return;
+            }
+            // Enemy debuffs are ACCUMULATED across all generated relics and applied
+            // as ONE merged application at the owner's first turn start (user order
+            // 2026-09-13): separate low-count applications each burn one enemy
+            // Artifact charge. Only the vulnerable-all fragment is enemy-facing
+            // today; the bag is keyed by power type to stay extensible.
+            foreach (var effect in effects.Where(e => e.Opcode == "apply_power" && e.Variant == "vulnerable"))
+            {
+                AccumulateEnemyDebuff<VulnerablePower>(owner, effect.Amount);
+            }
+            foreach (var effect in effects.Where(e => !(e.Opcode == "apply_power" && e.Variant == "vulnerable")))
+            {
+                await ExecuteEffectAsync(effect, owner);
+            }
         }
-        if (!participants.Contains(owner.Creature))
+        catch (Exception e)
         {
-            return;
-        }
-        if (!MatchesCondition(trigger!.Condition, owner))
-        {
-            return;
-        }
-        // Enemy debuffs are ACCUMULATED across all generated relics and applied
-        // as ONE merged application at the owner's first turn start (user order
-        // 2026-09-13): separate low-count applications each burn one enemy
-        // Artifact charge. Only the vulnerable-all fragment is enemy-facing
-        // today; the bag is keyed by power type to stay extensible.
-        foreach (var effect in effects.Where(e => e.Opcode == "apply_power" && e.Variant == "vulnerable"))
-        {
-            AccumulateEnemyDebuff<VulnerablePower>(owner, effect.Amount);
-        }
-        foreach (var effect in effects.Where(e => !(e.Opcode == "apply_power" && e.Variant == "vulnerable")))
-        {
-            await ExecuteEffectAsync(effect, owner);
+            MainFile.Logger.Error($"[{MainFile.ModId}] early turn-start effect suppressed to keep the combat alive: {e}");
         }
     }
 
@@ -223,49 +240,65 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     public override async Task AfterSideTurnStart(CombatSide side, IReadOnlyList<Creature> participants,
         ICombatState combatState)
     {
-        var (owner, trigger, effects) = Resolve("turn_start");
-        if (owner is null || effects is null)
+        // Fuse (L21): awaited by the engine's turn loop.
+        try
         {
-            return;
+            var (owner, trigger, effects) = Resolve("turn_start");
+            if (owner is null || effects is null)
+            {
+                return;
+            }
+            if (!participants.Contains(owner.Creature))
+            {
+                return;
+            }
+            // Flush the merged debuff bag BEFORE this relic's own condition gate:
+            // the bag spans all generated relics, so the flush must not depend on
+            // any single relic's condition passing.
+            if (owner.PlayerCombatState?.TurnNumber <= 1)
+            {
+                await FlushEnemyDebuffs(owner);
+            }
+            if (!MatchesCondition(trigger!.Condition, owner))
+            {
+                return;
+            }
+            Flash();
+            await ExecuteEffectsAsync(effects, owner);
         }
-        if (!participants.Contains(owner.Creature))
+        catch (Exception e)
         {
-            return;
+            MainFile.Logger.Error($"[{MainFile.ModId}] turn-start effect suppressed to keep the combat alive: {e}");
         }
-        // Flush the merged debuff bag BEFORE this relic's own condition gate:
-        // the bag spans all generated relics, so the flush must not depend on
-        // any single relic's condition passing.
-        if (owner.PlayerCombatState?.TurnNumber <= 1)
-        {
-            await FlushEnemyDebuffs(owner);
-        }
-        if (!MatchesCondition(trigger!.Condition, owner))
-        {
-            return;
-        }
-        Flash();
-        await ExecuteEffectsAsync(effects, owner);
     }
 
     /// <summary>turn_end (vanilla Anchor-family: BeforeSideTurnEnd with participants gate).</summary>
     public override async Task BeforeSideTurnEnd(PlayerChoiceContext choiceContext, CombatSide side,
         IEnumerable<Creature> participants)
     {
-        var (owner, trigger, effects) = Resolve("turn_end");
-        if (owner is null || effects is null)
+        // Fuse (L21): awaited by the engine's turn loop.
+        try
         {
-            return;
+            var (owner, trigger, effects) = Resolve("turn_end");
+            if (owner is null || effects is null)
+            {
+                return;
+            }
+            if (!participants.Contains(owner.Creature))
+            {
+                return;
+            }
+            if (!MatchesCondition(trigger!.Condition, owner))
+            {
+                return;
+            }
+            Flash();
+            await ExecuteEffectsAsync(effects, owner);
         }
-        if (!participants.Contains(owner.Creature))
+        catch (Exception e)
         {
-            return;
+            MainFile.Logger.Error($"[{MainFile.ModId}] turn-end effect suppressed to keep the combat alive: {e}");
         }
-        if (!MatchesCondition(trigger!.Condition, owner))
-        {
-            return;
-        }
-        Flash();
-        await ExecuteEffectsAsync(effects, owner);
     }
 
     public override async Task AfterRoomEntered(AbstractRoom room)
@@ -518,8 +551,13 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         foreach (var entry in pending)
         {
             var closed = s_vulnerableApply.MakeGenericMethod(entry.Key);
+            // SIX arguments: the optional `bool silent = false` is the 6th
+            // parameter, and MethodInfo.Invoke does NOT fill optional-param
+            // defaults - the 5-arg call threw TargetParameterCountException
+            // inside the engine's turn loop and froze the combat (Act 4
+            // report 2026-09-13).
             var task = (Task)closed.Invoke(null,
-                new object?[] { context, enemies, (decimal)entry.Value, owner.Creature, null })!;
+                new object?[] { context, enemies, (decimal)entry.Value, owner.Creature, null, false })!;
             await task;
         }
     }
