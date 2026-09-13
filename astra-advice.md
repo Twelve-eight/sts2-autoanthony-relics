@@ -1,6 +1,20 @@
-## 第二轮复审 (2026-09-13)
+## 第三轮复审 (2026-09-14)
 
-当前 `tools/relic-probe` 通过: 140 atoms, 25 supported/26 rejected, bilingual render, executor coverage, corrected values, 60 slots, same-seed determinism, 200-seed soak and trigger/effect reachability. 当前隔离构建 exit 0, 0 warning/0 error. 这仍是 pure data/generator evidence, 未覆盖真实 RelicCmd.Obtain,持有回调,存档,MP 和 Godot UI.
+当前隔离构建 exit 0, 0 warning/0 error. 本轮重新读取当前生成器, registry, seed capture 和 combat hooks, 未运行 Anthony relic probe 或真实游戏.
+
+本轮隔离 `relic-probe` 返回 `PROBE OK`: 140 atoms, 25 supported, 26 rejected, 60 slots, 同 seed 字节一致, 200 seeds soak, 全 trigger/effect reachable. 但样例文本仍显示 `Gain 8 Vigor` 被渲染为 `获得8点勇气`,而术语表/权威转储要求 `Vigor -> 活力`. 这不是生成身份问题,是当前中文渲染/术语回归缺陷;不能用 probe 的 bilingual render 通过掩盖译名错误. 证据: `../astra-advice-evidence/2026-09-14/anthony-relic-probe.txt:51-54`. 
+
+### P2 当前 pool fingerprint 未包含显式算法版本
+
+`RelicFragments.cs:71-89` 的 `Fingerprint` 由当前 trigger/effect keys 拼成, `RelicGenerator.SeedVersion` 则是独立常量 `relics-v1`; `AnthonyRelicRunRegistry.cs` 只把 seed 与 pool fingerprint 拼成 key. 如果生成算法改变但 fragment keys 不变且没有同步升级 `SeedVersion`/存档版本, 同进程旧 cache 仍可能复用. 这是版本契约 SOURCE, 不是本轮实机复现. 生成版本,catalog/ledger 身份和存档中的有效定义应成为明确的同一身份边界.
+
+### P2 seed 和 combat 生命周期仍未闭合
+
+`RunSeedCapturePatch.cs:37-72` 在新单机/新多人 prefix 与 `Launch` 捕获 seed,但没有 `CleanUp` 清空 `AnthonyRelicRunRegistry.CurrentRunSeed`. `AnthonyRelicModel.cs:508-561` 的 debuff bag 已按 owner net id 分桶并在 `AfterCombatEnd` 清空,较上一轮 process-global 形状更窄;仍未证明 owner id=0 fallback,断线/重连和多个 combat 生命周期不会复用. 本轮没有真实获取,战斗,存读档或多人验证.
+
+### P2 生成覆盖范围仍只由静态 guard 证明
+
+`AnthonyRelicModel.IsAllowed` 依赖 enabled/seed/pool, bag replacement 只在 `Populate` postfix 中执行并保留 BaseLib custom relic. 这支持共享池替换的源码意图,不证明 treasure/shop/event/dig/rest 的每个真实获得入口,也不证明与 Qurious 双开时最终池和 duplicate-id winner. 继续以 vertical slice 和实际获得路径验收,不以 60 slot probe 代替.
 
 ### P2 AAR-4: seed-only cache identity is not sufficient
 

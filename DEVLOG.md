@@ -593,3 +593,26 @@ RelicText.cs:93 把 Vigor 写成"勇气"。原版权威文本 (native_reference_
 术语译名的正确性必须由**外部权威源**保证, 不由记忆保证; 一处翻译错误的完整修复 =
 (改字符串) + (沉淀进术语表) + (跨仓 grep 同错) + (改变撰写流程), 缺任何一步都只是
 延迟复发。
+
+---
+
+## 2026-09-14 astra 第三轮建议处理 (一): vigor "勇气" 探针证据证伪 + 探针加固
+
+astra 第三轮复审落盘 (根 `astra-advice.md` + 各项目 `astra-advice.md` + `astra-advice-evidence/2026-09-14/`)。其 AAR 探针输出 (anthony-relic-probe.txt:51-54) 声称 vigor 仍渲染"勇气"。
+
+**证伪过程** (全部可复核):
+1. vigor 修复在提交 538f4b6 (v0.1.3) 里, 全源码树 grep "勇气" = 0。
+2. 部署 DLL 字节扫描 (UTF-16): "活力"x1 / "勇气"x0。
+3. astra 自己的审查副本 RelicText.cs (mtime 00:19:21) 也是"活力"——副本源码与其探针输出自相矛盾。
+4. 根因: `tools/relic-probe/RelicProbe.csproj` HintPath 绑定 gitignored 的 `mod/.godot/mono/temp/bin/Debug/AutoAnthonyRelics.dll` (09-12 23:06 旧构建, "勇气"x1); vigor 修复后只做 Release 构建, Debug 产物滞留; astra 整树拷贝带走它, 探针加载了旧二进制。
+
+**修复** (本提交):
+- csproj 改绑 Release 输出 + 事故注释。
+- Program.Main 新鲜度守卫: mod DLL 构建时间 < 最新源码 mtime → `FAIL stale binary` + exit 2。
+- 复跑 `.tmp/relic-probe-rerun-2026-09-14.txt`: exit 0, PROBE OK, vigor 行 = "获得8点活力。", "勇气" 0 次, 首行 OK binary freshness。
+- 附带: `AnthonyRelicRunRegistry.cs` 缓存键字面量含原始 NUL 字节 (byte 1438, 非转义), grep/Read 按二进制拒读; 已改 `"\0"` 转义 (运行时值不变)。Qurious `ChaosRelicRunRegistry.cs` 同病同修。
+
+**回报 astra**: `G:\omp works\astra-advice-response-2026-09-14.md` (撤回请求 + 根因 + 修复 + MegaLabel 日志缺失说明)。
+
+### L29 (教训)
+探针引用 gitignored 构建产物 = 证据漂移通道: 二进制不随源码前进, "证据绑定二进制"必须附新鲜度断言 (或改 ProjectReference 强制重建); 审查副本整树拷贝必须排除 bin/obj/.godot, 否则探针测的是仓库里最陈旧的那份产物。静默的旧二进制比没有二进制更糟——它会"复现"已被修复的缺陷并污染审查结论。

@@ -8,7 +8,15 @@
     <RootNamespace>RelicProbe</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="AutoAnthonyRelics"><HintPath>G:/omp works/sts2-autoanthony-relics/mod/.godot/mono/temp/bin/Debug/AutoAnthonyRelics.dll</HintPath></Reference>
+    <Reference Include="AutoAnthonyRelics">
+      <!-- Explicit DLL input (review discipline: evidence binds to a binary).
+           Must be the RELEASE output: the Debug temp output went stale after
+           the 2026-09-14 vigor fix (only Release was rebuilt) and an external
+           review probe then reported the already-fixed text as still broken.
+           Program.Main also self-checks binary-vs-source freshness and fails
+           loudly instead of probing yesterday's code. -->
+      <HintPath>G:/omp works/sts2-autoanthony-relics/mod/.godot/mono/temp/bin/Release/AutoAnthonyRelics.dll</HintPath>
+    </Reference>
     <Reference Include="sts2"><HintPath>G:/steam/steamapps/common/Slay the Spire 2/data_sts2_windows_x86_64/sts2.dll</HintPath></Reference>
     <Reference Include="BaseLib"><HintPath>G:/steam/steamapps/workshop/content/2868840/3737335127/BaseLib/BaseLib.dll</HintPath></Reference>
   </ItemGroup>

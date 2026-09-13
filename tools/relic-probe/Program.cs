@@ -37,6 +37,34 @@ internal static class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
 
+        // The csproj binds this probe to the mod's build output by path - an
+        // untracked artifact that only changes when the mod is rebuilt. A
+        // forgotten rebuild must fail loudly, not silently measure yesterday's
+        // code (2026-09-14: an external review probe ran against a pre-fix
+        // Debug artifact and reported the already-fixed Vigor ZHS text as
+        // still broken).
+        string modAssembly = typeof(RelicFragmentPool).Assembly.Location;
+        DateTime built = File.GetLastWriteTime(modAssembly);
+        string codeDir = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "mod", "Code"));
+        if (!Directory.Exists(codeDir))
+        {
+            Console.WriteLine($"FAIL  freshness check: source dir not found: {codeDir}");
+            return 2;
+        }
+        DateTime newestSource = Directory.EnumerateFiles(codeDir, "*.cs", SearchOption.AllDirectories)
+            .Select(File.GetLastWriteTime)
+            .DefaultIfEmpty(built)
+            .Max();
+        if (newestSource > built)
+        {
+            Console.WriteLine(
+                $"FAIL  stale binary: {modAssembly} built {built:u} is older than newest " +
+                $"source {newestSource:u} - rebuild the mod before probing");
+            return 2;
+        }
+        Console.WriteLine($"OK    binary freshness: {Path.GetFileName(modAssembly)} built {built:u} >= newest source {newestSource:u}");
+
         // ---- 1. Ledger integrity: every supported entry resolves; Build throws otherwise.
         RelicAtomPool atoms = RelicAtomData.LoadAtoms();
         RelicLedger ledger = RelicAtomData.LoadLedger();
