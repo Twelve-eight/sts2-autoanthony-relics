@@ -475,3 +475,11 @@ OnFocus 枚举中途炸断 → NHoverTipSet 关闭注册缺失 → 详情浮窗�
 8. GPT6-Astra 二轮 → 合并袋按 owner NetId 分键 + registry 指纹键 (b902804)。
 教训要点: L4 反射唯一性 / L7 静态状态生命周期 (combat_end 漏发=词条静默失效) /
 L2 用户报告优先。详见 docs/session-log-2026-09-12-13.md 第二节。
+
+## 2026-09-13 紧急: 60 个无效果占位遗物 = 本 mod 关闭态槽位仍可获取
+
+用户只开怪异炼化 (本 mod enabled=False), 仍获得 60 个无效果遗物 —— 即本 mod
+60 个槽位: 开关只门控钩子, 池补丁 early-return 不剥离自家, 加上怪异炼化保留
+一切自定义遗物 → 槽位可获取但无效果。
+修复: 池补丁常驻 (不再 early-return), Keep 契约 = 自家按开关 / 他家按
+IsAllowed / 原版按替换开关; IsAllowed 增加片段池空守卫。

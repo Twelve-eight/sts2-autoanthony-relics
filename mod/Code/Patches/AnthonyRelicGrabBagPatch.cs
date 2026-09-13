@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -37,14 +38,17 @@ internal static class AnthonyRelicPoolReplacement
 {
     public const string BagTypeName = "MegaCrit.Sts2.Core.Runs." + "\u0052\u0065\u006C\u0069\u0063\u0047\u0072\u0061\u0062\u0042\u0061\u0067";
 
-    internal static void Apply(object bag)
+    internal static void Apply(object bag, MegaCrit.Sts2.Core.Entities.Players.Player? player)
     {
         try
         {
-            if (!AutoAnthonyRelicsConfig.Enabled || !AutoAnthonyRelicsConfig.ReplaceVanillaRelics)
-            {
-                return;
-            }
+            // Runs whenever the mod is loaded — NOT gated on Enabled: with the
+            // master switch OFF our own registered relics must be REMOVED from
+            // the bag (their hooks are gated off -> effect-less placeholders).
+            // (User report 2026-09-13: 60 effect-less placeholders obtainable
+            // while this mod's switch was off — they were ours, kept alive by
+            // the other generator's keep-all-custom predicate and by this patch
+            // early-returning instead of stripping them.)
             var bagType = bag.GetType();
             var dequesField = AccessTools.Field(bagType, "_deques");
             var originalsField = AccessTools.Field(bagType, "_originalRelics");
@@ -53,6 +57,29 @@ internal static class AnthonyRelicPoolReplacement
                 MainFile.Logger.Error($"[{MainFile.ModId}] pool replacement: _deques field not found");
                 return;
             }
+            IRunState? runState = player?.RunState
+                ?? RunManager.Instance?.DebugOnlyGetState();
+
+            bool Keep(RelicModel r)
+            {
+                if (r is Models.AnthonyRelicModel)
+                {
+                    return AutoAnthonyRelicsConfig.Enabled; // own: only when on
+                }
+                if (r is BaseLib.Abstracts.CustomRelicModel)
+                {
+                    // Other mods' customs: respect THEIR gates (a disabled
+                    // generator's relics must not be obtainable). KeepModdedRelics
+                    //=false additionally removes other mods' relics entirely.
+                    if (!AutoAnthonyRelicsConfig.KeepModdedRelics)
+                    {
+                        return false;
+                    }
+                    return runState != null && r.IsAllowed(runState);
+                }
+                return AutoAnthonyRelicsConfig.Enabled && AutoAnthonyRelicsConfig.ReplaceVanillaRelics; // vanilla: only when replacing
+            }
+
             int removed = 0;
             foreach (var list in deques.Values)
             {
@@ -62,22 +89,19 @@ internal static class AnthonyRelicPoolReplacement
             {
                 removed += originals.RemoveAll(r => !Keep(r));
             }
-            MainFile.Logger.Info($"[{MainFile.ModId}] pool replacement: removed {removed} vanilla relics from the run grab bag " +
-                                 $"({deques.Values.Sum(l => l.Count)} generated/modded relics remain)");
+            // Engine-native IsAllowed enforcement on top of ours.
+            if (runState != null)
+            {
+                AccessTools.Method(bagType, "RemoveDisallowedRelicsFromDeques")
+                    ?.Invoke(bag, new object?[] { runState });
+            }
+            MainFile.Logger.Info($"[{MainFile.ModId}] pool replacement: removed {removed} relics from the run grab bag " +
+                                 $"({deques.Values.Sum(l => l.Count)} remain, enabled={AutoAnthonyRelicsConfig.Enabled}, replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics})");
         }
         catch (Exception e)
         {
             MainFile.Logger.Error($"[{MainFile.ModId}] pool replacement failed: {e.Message}");
         }
-    }
-
-    private static bool Keep(RelicModel relic)
-    {
-        if (relic is BaseLib.Abstracts.CustomRelicModel)
-        {
-            return AutoAnthonyRelicsConfig.KeepModdedRelics || relic is Models.AnthonyRelicModel;
-        }
-        return false;
     }
 }
 
@@ -91,9 +115,9 @@ internal static class AnthonyRelicPoolReplacementPlayerPatch
         return bagType?.GetMethod("Populate", new[] { typeof(MegaCrit.Sts2.Core.Entities.Players.Player), typeof(MegaCrit.Sts2.Core.Random.Rng) });
     }
 
-    private static void Postfix(object __instance)
+    private static void Postfix(object __instance, MegaCrit.Sts2.Core.Entities.Players.Player player)
     {
-        AnthonyRelicPoolReplacement.Apply(__instance);
+        AnthonyRelicPoolReplacement.Apply(__instance, player);
     }
 }
 
@@ -112,6 +136,6 @@ internal static class AnthonyRelicPoolReplacementEnumerablePatch
 
     private static void Postfix(object __instance)
     {
-        AnthonyRelicPoolReplacement.Apply(__instance);
+        AnthonyRelicPoolReplacement.Apply(__instance, null);
     }
 }

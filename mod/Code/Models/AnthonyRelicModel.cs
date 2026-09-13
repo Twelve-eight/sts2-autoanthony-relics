@@ -53,9 +53,12 @@ public abstract class AnthonyRelicModel : CustomRelicModel
 
     public override bool IsAllowed(IRunState runState)
     {
+        // Fragment-pool guard: if startup failed to build the pool, the slots
+        // would drop as effect-less placeholders (user report 2026-09-13 class).
         return base.IsAllowed(runState)
             && AutoAnthonyRelicsConfig.Enabled
-            && AnthonyRelicRunRegistry.CurrentRunSeed is not null;
+            && AnthonyRelicRunRegistry.CurrentRunSeed is not null
+            && MainFile.FragmentPool.Triggers.Count > 0;
     }
 
     /// <summary>Never at Neow: the run seed does not exist yet at character select.</summary>
