@@ -90,7 +90,7 @@ public static class RelicText
         int amount = effect.Amount;
         return (effect.Opcode, effect.Variant, effect.Target) switch
         {
-            ("apply_power", "vigor", "self") => $"获得{amount}点勇气。",
+            ("apply_power", "vigor", "self") => $"获得{amount}点活力。",
             ("apply_power", "strength", "self") => $"获得{amount}点力量。",
             ("apply_power", "thorns", "self") => $"获得{amount}点荆棘。",
             ("apply_power", "vulnerable", "all_enemies") => $"给予所有敌人{amount}层易伤。",
