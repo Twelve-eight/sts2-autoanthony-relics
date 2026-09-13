@@ -510,6 +510,11 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     // multiplayer every client hosts relic instances for ALL players, and a
     // process-global bag would merge two players' debuffs into whoever's
     // turn start flushes first. ulong 0 = single-player fallback.
+    // Owner-0 reachability (third-round AAR-6): the 0 bucket exists only when
+    // NetId is unset, i.e. single-player, where exactly one player exists -
+    // two owners can never share the 0 bucket; MP players always carry real
+    // NetIds. Bags flush on their owner's turn start and the whole map clears
+    // on combat end; StS2 has no overlapping combat states.
     private static readonly Dictionary<ulong, Dictionary<Type, int>> PendingEnemyDebuffs = new();
 
     private static ulong OwnerKey(Player? owner) => owner?.NetId ?? 0;

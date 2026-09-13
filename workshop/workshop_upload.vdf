@@ -18,7 +18,7 @@
 
 [list]
 [*][b]60 件生成遗物[/b] - 每局从种子派生,逐槽位重新生成(20 普通 / 21 罕见 / 19 稀有附近分布)
-[*][b]条件重组[/b] - 触发片段(回合开始 / 回合结束 / 战斗开始 / 战斗结束 / 战斗胜利 / 进入战斗 / 拾取时 / 打出能力牌 / 敌人死亡 / 获得金币 / 格挡被清空)与效果片段(力量 / 勇气 / 荆棘 / 全体易伤 / 格挡 / 回复 / 能量 / 抽牌 / 生命上限 / 金币 / 药水栏位 / 全体伤害)从[b]同一个池子独立采样[/b]
+[*][b]条件重组[/b] - 触发片段(回合开始 / 回合结束 / 战斗开始 / 战斗结束 / 战斗胜利 / 进入战斗 / 拾取时 / 打出能力牌 / 敌人死亡 / 获得金币 / 格挡被清空)与效果片段(力量 / 活力 / 荆棘 / 全体易伤 / 格挡 / 回复 / 能量 / 抽牌 / 生命上限 / 金币 / 药水栏位 / 全体伤害)从[b]同一个池子独立采样[/b]
 [*][b]双效果遗物[/b] - 约 30% 的遗物携带两个效果,同挂一个触发
 [*][b]纯被动遗物[/b] - 少数遗物是首回合抽牌修正(正负都有)
 [*][b]中英双语描述[/b] - 每件遗物的名字与描述由片段语义实时渲染
@@ -53,14 +53,13 @@
 [list]
 [*][b]Enabled(总开关)[/b] - 关闭后生成遗物停用,奖励池恢复原版
 [*][b]ReplaceVanillaRelics(替换原版遗物)[/b] - 关闭后生成遗物与原版遗物混合掉落
-[*][b]KeepModdedRelics(保留其他模组遗物)[/b] - 与其他 BaseLib 遗物模组共存
+[*]其他 BaseLib 遗物模组的自定义遗物自动保留,无需单独开关
 [/list]
 
 [h2]与 怪异炼化 - 遗物 共存 / Coexistence with Qurious Crafting[/h2]
 
-可与 [b]Qurious Crafting - Relics(怪异炼化 - 遗物)[/b] 同装:两个模组的替换补丁都
-保留对方的自定义遗物,同装时掉落池是两者的混合,安装顺序无关.
-[i]Install alongside Qurious Crafting - Relics for a mixed pool of both generators; order-independent.[/i]
+可与 [b]Qurious Crafting - Relics(怪异炼化 - 遗物)[/b] 同装:本模组的替换会保留 BaseLib 自定义遗物,但 Qurious 的掉落池只保留它自己的混沌遗物,双装时实际掉落以 Qurious 为主,组合体验请以实测为准.
+[i]Can be installed alongside Qurious Crafting - Relics; note that Qurious's pool replacement keeps only its own chaos relics, so with both installed drops skew toward Qurious. Test your combination.[/i]
 
 [h2]多人联机 / Multiplayer[/h2]
 
@@ -90,6 +89,6 @@
 
 局内按 ` 打开开发者控制台:
 [code]relic add AUTOANTHONYRELICS-ANTHONY_RELIC005[/code] (添加第 6 号槽位生成遗物)"
-	"changenote"		"v0.1.3: text fix - Vigor was mistranslated as 勇气 (Courage) in the generated relic wording; the canonical game term is 活力. Workspace terminology glossary introduced so zhs terms are checked against authoritative game text instead of memory. v0.1.2:  hotfix - the merged enemy-debuff application invoked PowerCmd.Apply with 5 arguments against its 6-parameter overload (optional bool is NOT filled by MethodInfo.Invoke), throwing TargetParameterCountException inside the engine turn loop and freezing the fight (Act 4 elite/Heart report); the 6th argument is now passed and the four turn-loop hooks are exception-guarded so a relic fault degrades to a missed effect instead of a stuck combat. v0.1.1:  per-relic generated descriptions now render in-game (run-seed loc table updater; BaseLib only bakes the generic text at boot) and all 60 slots gained procedural per-slot relic icons (normal/outline/big)."
+	"changenote"		"v0.1.4: lifecycle + identity - RunManager.CleanUp now resets the active seed and the definition cache when a run ends (menu/outside-run invariant); the definition cache key now includes the generator SeedVersion next to the pool fingerprint, so an algorithm or ledger change can never serve a stale same-seed pool. v0.1.3: text fix - Vigor was mistranslated as 勇气 (Courage) in the generated relic wording; the canonical game term is 活力. Workspace terminology glossary introduced so zhs terms are checked against authoritative game text instead of memory. v0.1.2:  hotfix - the merged enemy-debuff application invoked PowerCmd.Apply with 5 arguments against its 6-parameter overload (optional bool is NOT filled by MethodInfo.Invoke), throwing TargetParameterCountException inside the engine turn loop and freezing the fight (Act 4 elite/Heart report); the 6th argument is now passed and the four turn-loop hooks are exception-guarded so a relic fault degrades to a missed effect instead of a stuck combat. v0.1.1:  per-relic generated descriptions now render in-game (run-seed loc table updater; BaseLib only bakes the generic text at boot) and all 60 slots gained procedural per-slot relic icons (normal/outline/big)."
 	"publishedfileid"		""
 }

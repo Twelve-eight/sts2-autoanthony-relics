@@ -6,10 +6,12 @@ namespace AutoAnthonyRelics;
 
 /// <summary>
 /// Per-run cache of generated relic definitions. Definitions are a pure
-/// function of the run seed (no config participates), so the cache is keyed
-/// by the seed alone and save-loads / reconnects regenerate the identical
-/// relics from the engine-restored seed. Bounded to a few seeds (map previews
-/// and menus can query relics without a run).
+/// function of the run seed, the generator ALGORITHM VERSION and the fragment
+/// pool (ledger/catalog data) - the cache key carries all three (astra AAR-4:
+/// a pool/ledger change or an algorithm change with the same seed must never
+/// serve a stale cached pool), so save-loads / reconnects regenerate the
+/// identical relics from the engine-restored seed. Bounded to a few seeds
+/// (map previews and menus can query relics without a run).
 /// </summary>
 public static class AnthonyRelicRunRegistry
 {
@@ -25,11 +27,12 @@ public static class AnthonyRelicRunRegistry
     {
         lock (Gate)
         {
-            // Cache key = seed + FRAGMENT-POOL FINGERPRINT (second-round
-            // review, 2026-09-13): definitions depend on the pool/ledger too,
-            // so a data or ledger change with the same seed must not serve a
-            // stale cached pool.
-            string key = runSeed + "\0" + pool.Fingerprint;
+            // Cache key = seed + ALGORITHM VERSION + fragment-pool fingerprint
+            // (second-round review 2026-09-13 added the fingerprint; third
+            // round AAR-4 added SeedVersion): definitions depend on the pool,
+            // the ledger and the generator, so a data, ledger or algorithm
+            // change with the same seed must not serve a stale cached pool.
+            string key = runSeed + "\0" + RelicGenerator.SeedVersion + "\0" + pool.Fingerprint;
             if (Cache.TryGetValue(key, out IReadOnlyList<GeneratedRelicDefinition>? cached))
             {
                 return cached;
@@ -42,6 +45,23 @@ public static class AnthonyRelicRunRegistry
             Order.Enqueue(key);
             Cache[key] = generated;
             return generated;
+        }
+    }
+
+    /// <summary>
+    /// Run-end reset (astra AAR-7): called from the RunManager.CleanUp
+    /// postfix. Drops the active seed - menu/canonical queries must not
+    /// resolve the previous run - and clears the cache (definitions are a
+    /// pure function of (seed, version, fingerprint), so clearing costs a
+    /// regeneration at most and cannot change outcomes).
+    /// </summary>
+    public static void ResetForRunEnd()
+    {
+        CurrentRunSeed = null;
+        lock (Gate)
+        {
+            Cache.Clear();
+            Order.Clear();
         }
     }
 

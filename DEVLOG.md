@@ -616,3 +616,20 @@ astra 第三轮复审落盘 (根 `astra-advice.md` + 各项目 `astra-advice.md`
 
 ### L29 (教训)
 探针引用 gitignored 构建产物 = 证据漂移通道: 二进制不随源码前进, "证据绑定二进制"必须附新鲜度断言 (或改 ProjectReference 强制重建); 审查副本整树拷贝必须排除 bin/obj/.godot, 否则探针测的是仓库里最陈旧的那份产物。静默的旧二进制比没有二进制更糟——它会"复现"已被修复的缺陷并污染审查结论。
+
+---
+
+## 2026-09-14 v0.1.4: astra 第三轮 AAR-4/-5/-6/-7 处置
+
+1. (AAR-7) 新增 `Patches/RunCleanUpPatch` (RunManager.CleanUp postfix) → `AnthonyRelicRunRegistry.ResetForRunEnd()`: 清 CurrentRunSeed + 定义缓存。定义是 (seed, SeedVersion, fingerprint) 的纯函数, 清缓存最多付一次重生成, 不改结果。
+2. (AAR-4) 缓存键 = seed + "\0" + RelicGenerator.SeedVersion ("relics-v1") + "\0" + pool.Fingerprint: 算法或账本数据变化时, 同 seed 不再服务旧池。
+3. (AAR-6) 契约注释落码: owner 分桶键为 NetId; 0 桶仅在单人局可达 (单人只有一个玩家, 两 owner 不可能共享 0 桶; MP 玩家恒有真实 NetId); StS2 无重叠战斗状态。不为不可达状态加防御 (astra 方法论第六条)。
+4. (AAR-5) 采样语义裁决: 池按 Kind|Condition 形状折叠是有意设计 (条件重组是产品核心), 逐原子权重作候选保留; "probe 反映该选择"记为后续项, 本轮未改代码。
+5. registry 类注释纠正 ("keyed by seed alone" 是过时描述)。
+
+**验证**: Release 构建 0 警告 0 错误; relic-probe 复跑 PROBE OK (新鲜度守卫通过); 直发部署 0.1.4 至 mods/ + workshop/content, MD5+版本校验 OK。CleanUp/获得/存读档需实机验收。
+
+**vdf 描述更正** (工坊首次上传前): 效果列表 "勇气"→"活力" —— L28 同类错的第三处藏身点, 藏在**工坊发布描述**里, 代码 sweep 抓不到它; 删除已不存在的 KeepModdedRelics 选项行; "与 Qurious 同装=混合池且顺序无关"的失实宣称改为如实描述 (Qurious 池替换只保留其混沌遗物, 双装掉落以 Qurious 为主)。
+
+### L30 (教训)
+"修一处译名错误后跨全工作区 grep" 的 "工作区" 必须包含**用户可见发布工件** (workshop_upload.vdf 描述、json 描述字段、pck 内文本), 不只是代码与本地化源。工坊描述是仅次于游戏内文本的术语暴露面, 而且在首次上传后每次改动都要走工坊审核。
