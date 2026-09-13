@@ -586,12 +586,32 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         return (owner, definition.Trigger, definition.Effects);
     }
 
+    // Combat-scoped opcodes (matched by opcode alone): their engine commands
+    // need a live combat context (energy / enemies / draw pile) and NRE
+    // outside combat - an Ancient-event pickup fired gain_energy with no
+    // PlayerCombatState, killing the obtain chain and freezing the game's UI
+    // in a render loop (real incident 2026-09-14). Run-scoped opcodes (heal,
+    // gain_max_hp, gain_gold, gain_max_potion, modify_hand_draw) are safe.
+    private static readonly HashSet<string> CombatScopedOpcodes = new(StringComparer.Ordinal)
+    {
+        "apply_power", "gain_block", "gain_energy", "draw_cards", "deal_damage",
+    };
+
     private async Task ExecuteEffectsAsync(IReadOnlyList<EffectFragment> effects, Player owner)
     {
         var context = new ThrowingPlayerChoiceContext();
         foreach (EffectFragment effect in effects)
         {
-            await ExecuteEffectAsync(effect, owner, context);
+            try
+            {
+                await ExecuteEffectAsync(effect, owner, context);
+            }
+            catch (Exception e)
+            {
+                // Per-effect fuse: one broken effect must not break the whole
+                // obtain chain / trigger pipeline (2026-09-14 freeze incident).
+                MainFile.Logger.Error($"[{MainFile.ModId}] effect {effect.Opcode}/{effect.Variant} failed; continuing: {e.Message}");
+            }
         }
     }
 
@@ -600,6 +620,14 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     {
         context ??= new ThrowingPlayerChoiceContext();
         {
+            if (CombatScopedOpcodes.Contains(effect.Opcode) && owner.PlayerCombatState is null)
+            {
+                // Out-of-combat guard: this trigger fired outside any combat
+                // (obtain / room-entered / run-level hooks) - the combat-scoped
+                // command would NRE, so degrade to a skipped effect instead.
+                MainFile.Logger.Info($"[{MainFile.ModId}] effect {effect.Opcode}/{effect.Variant} skipped: no combat context at this trigger");
+                return;
+            }
             int amount = effect.Amount;
             switch (effect.Opcode, effect.Variant, effect.Target)
             {
