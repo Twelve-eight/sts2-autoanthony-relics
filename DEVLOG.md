@@ -490,3 +490,29 @@ IsAllowed / 原版按替换开关; IsAllowed 增加片段池空守卫。
 责任域剥离: 只在开关关时剥离自家槽位; 原版只在 (开启且替换开启) 时剥离;
 他家遗物交给其 IsAllowed + 引擎原生清理。KeepModdedRelics 配置项移除
 (被责任域契约取代)。
+
+## 2026-09-13 深夜 - 文本描述 + 随机外观补齐 (v0.1.1)
+
+### 用户报告
+「东尼算法-遗物没有应有的文本描述与随机外观，而这些部分应当向怪异炼化遗物看齐。」
+
+### 根因
+- Localization 覆写与 DescriptionEn/Zhs、图标路径覆写**早已存在**，但:
+  1. BaseLib ModelLocPatch 只在 ModelDb.Init（启动，seed=null）评估一次 ILocalizationProvider
+     → loc 表被通用文本（"Generated Relic"）烤死，局内永不刷新 → 没有文本描述。
+  2. mod 里没有任何图片资源（无 images/ 目录）→ PackedIconPath 指向不存在的文件 → 没有外观。
+
+### 修复 (v0.1.1, 对齐 Qurious 模式)
+- **Pools/AnthonyRelicRegistry.cs**: 60 个槽位类型的注册表 + ModelDb 规范实例
+  （ChaosSharedRelicPool 的 ChaosRelicRegistry 模式移植）。
+- **Patches/AnthonyRelicLocUpdater.cs**: seed 捕获时按当前 locale 重写 "relics" loc 表全部
+  60 槽 title/description（反射 LocTable._translations，同 BaseLib 机制）；去重键 =
+  seed + FragmentPool.Fingerprint（Qurious v0.5.6 教训 L25 直接吸收：键必须覆盖全部输入）。
+  RunSeedCapturePatch 两个捕获点接线。pool 未建好（Triggers.Count==0）时跳过。
+- **tools/gen_icons.py**: 60 套程序化遗物硬币图标（94x94 normal/outline + 282x282 big），
+  金色角相位 hue（+200° 偏移与 Qurious 色系区分），暗石板环+浅盘+n 边形印记（n=3..8 按
+  slot 旋转），输出 mod/AutoAnthonyRelics/images/relics/。pck 819KB 已含图标与 loc。
+
+构建 0 错误; 合并延迟部署守护（.tmp/deferred-deploy-combined.ps1）等游戏退出后补发
+mods/ 与 workshop/content/ 两处并校验哈希+版本。实机验证待用户: 遗物浮窗应显示本局
+生成的双语词条描述, 遗物图标应为逐槽不同的硬币图。

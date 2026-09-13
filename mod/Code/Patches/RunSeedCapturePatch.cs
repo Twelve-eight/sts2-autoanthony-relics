@@ -42,6 +42,7 @@ internal static class RunSeedEarlyCapture
             if (!string.IsNullOrEmpty(seed))
             {
                 AnthonyRelicRunRegistry.CurrentRunSeed = seed;
+                AnthonyRelicLocUpdater.OnSeedCaptured(seed);
                 MainFile.Logger.Info($"[{MainFile.ModId}] run seed early-captured: {seed}");
             }
         }
@@ -61,6 +62,7 @@ internal static class RunSeedLaunchTrackPatch
         {
             string? seed = __result?.Rng?.StringSeed;
             AnthonyRelicRunRegistry.CurrentRunSeed = seed;
+            AnthonyRelicLocUpdater.OnSeedCaptured(seed);
             MainFile.Logger.Info($"[{MainFile.ModId}] run seed captured: {seed ?? "(null)"}");
         }
         catch (Exception e)

@@ -3,7 +3,7 @@
   "name": "Anthony Algorithm - Relics (东尼算法 - 遗物)",
   "author": "omp",
   "description": "A faithful reimplementation of the Anthony algorithm (Alriph's Auto-Anthonyology) applied to RELICS: relic behaviors extracted from the game's own relic implementations are split into independent trigger and effect fragments, then re-sampled and recombined per run seed, so any legal trigger can end up attached to any legal effect. Only hand-audited fragments (a deny-by-default evidence ledger) enter the generation pool. The recombination mechanism follows Alriph's Auto-Anthonyology (mod id AutoAnthony); the relic atom data was extracted from Slay the Spire 2's own relic classes by this mod's tooling; the generator, host and rendering are an independent reimplementation. Standalone; no AutoAnthony dependency. Coexists with Qurious Crafting - Relics.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "min_game_version": "0.111.0",
   "has_pck": true,
   "has_dll": true,
