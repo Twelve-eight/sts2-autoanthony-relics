@@ -3,8 +3,6 @@
   "AUTOANTHONYRELICS-ENABLED.hover.desc": "Master switch. When off: generated relics stop spawning, the reward pool returns to vanilla relics, and owned generated relics have no effect.",
   "AUTOANTHONYRELICS-REPLACE_VANILLA_RELICS.title": "Replace Vanilla Relics",
   "AUTOANTHONYRELICS-REPLACE_VANILLA_RELICS.hover.desc": "When on: vanilla relics are stripped from the run grab bag, so every reward source (combat, chests, shops, events) offers generated relics only. Ancients, starters, Neow and event-fixed relics are always untouched.",
-  "AUTOANTHONYRELICS-KEEP_MODDED_RELICS.title": "Keep Other Mods' Relics",
-  "AUTOANTHONYRELICS-KEEP_MODDED_RELICS.hover.desc": "When on: relics from other BaseLib mods (e.g. Qurious Crafting - Relics) stay in the pool alongside generated relics - install order does not matter. When off, only generated relics are kept.",
   "AUTOANTHONYRELICS-SETTINGS_GROUP.title": "Anthony Algorithm - Relics",
   "AUTOANTHONYRELICS-SETTINGS_OPEN.title": "Open Settings",
   "AUTOANTHONYRELICS-SETTINGS_PAGE_TITLE.title": "Anthony Algorithm - Relics",

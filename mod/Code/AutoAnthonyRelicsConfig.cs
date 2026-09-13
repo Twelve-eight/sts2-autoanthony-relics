@@ -29,12 +29,4 @@ internal class AutoAnthonyRelicsConfig : SimpleModConfig
     /// generated relics replace the drop pool (user order: output = relics).
     /// </summary>
     public static bool ReplaceVanillaRelics { get; set; } = true;
-
-    /// <summary>
-    /// When true, other mods' BaseLib custom relics stay in the grab bag
-    /// (Qurious coexistence, astra-advice note 9). Both mods installed with
-    /// defaults -> one mixed pool of Qurious + Anthony relics, no order
-    /// dependence: each mod's patch keeps every CustomRelicModel.
-    /// </summary>
-    public static bool KeepModdedRelics { get; set; } = true;
 }

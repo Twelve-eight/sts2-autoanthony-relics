@@ -42,13 +42,16 @@ internal static class AnthonyRelicPoolReplacement
     {
         try
         {
-            // Runs whenever the mod is loaded — NOT gated on Enabled: with the
-            // master switch OFF our own registered relics must be REMOVED from
-            // the bag (their hooks are gated off -> effect-less placeholders).
-            // (User report 2026-09-13: 60 effect-less placeholders obtainable
-            // while this mod's switch was off — they were ours, kept alive by
-            // the other generator's keep-all-custom predicate and by this patch
-            // early-returning instead of stripping them.)
+            // RESPONSIBILITY-SCOPED STRIP (rewrite after the 2026-09-13
+            // "empty bag / Circlet-only shop" incident, same as Qurious):
+            // this patch only removes what THIS mod is responsible for -
+            //   1. our own slots when OUR master switch is off (effect-less
+            //      placeholders — the "60 no-effect relics" the user got),
+            //   2. vanilla relics when we are actively replacing
+            //      (Enabled && ReplaceVanillaRelics),
+            // and NEVER touches other mods' customs or relics: those are
+            // governed by their own switches via their own IsAllowed,
+            // enforced engine-natively by RemoveDisallowedRelicsFromDeques.
             var bagType = bag.GetType();
             var dequesField = AccessTools.Field(bagType, "_deques");
             var originalsField = AccessTools.Field(bagType, "_originalRelics");
@@ -60,36 +63,37 @@ internal static class AnthonyRelicPoolReplacement
             IRunState? runState = player?.RunState
                 ?? RunManager.Instance?.DebugOnlyGetState();
 
-            bool Keep(RelicModel r)
+            int removed = 0;
+            if (AutoAnthonyRelicsConfig.Enabled)
             {
-                if (r is Models.AnthonyRelicModel)
+                if (AutoAnthonyRelicsConfig.ReplaceVanillaRelics)
                 {
-                    return AutoAnthonyRelicsConfig.Enabled; // own: only when on
-                }
-                if (r is BaseLib.Abstracts.CustomRelicModel)
-                {
-                    // Other mods' customs: respect THEIR gates (a disabled
-                    // generator's relics must not be obtainable). KeepModdedRelics
-                    //=false additionally removes other mods' relics entirely.
-                    if (!AutoAnthonyRelicsConfig.KeepModdedRelics)
+                    // Replacing: strip vanilla. Our slots + other mods' relics stay.
+                    foreach (var list in deques.Values)
                     {
-                        return false;
+                        removed += list.RemoveAll(r => r is not BaseLib.Abstracts.CustomRelicModel);
                     }
-                    return runState != null && r.IsAllowed(runState);
+                    if (originalsField?.GetValue(bag) is List<RelicModel> originals)
+                    {
+                        removed += originals.RemoveAll(r => r is not BaseLib.Abstracts.CustomRelicModel);
+                    }
                 }
-                return AutoAnthonyRelicsConfig.Enabled && AutoAnthonyRelicsConfig.ReplaceVanillaRelics; // vanilla: only when replacing
+            }
+            else
+            {
+                // Switch off: strip ONLY our own slots (effect-less placeholders).
+                foreach (var list in deques.Values)
+                {
+                    removed += list.RemoveAll(r => r is Models.AnthonyRelicModel);
+                }
+                if (originalsField?.GetValue(bag) is List<RelicModel> originals)
+                {
+                    removed += originals.RemoveAll(r => r is Models.AnthonyRelicModel);
+                }
             }
 
-            int removed = 0;
-            foreach (var list in deques.Values)
-            {
-                removed += list.RemoveAll(r => !Keep(r));
-            }
-            if (originalsField?.GetValue(bag) is List<RelicModel> originals)
-            {
-                removed += originals.RemoveAll(r => !Keep(r));
-            }
-            // Engine-native IsAllowed enforcement on top of ours.
+            // Engine-native IsAllowed enforcement: covers other generators'
+            // off-states through THEIR IsAllowed, with the engine's own rule.
             if (runState != null)
             {
                 AccessTools.Method(bagType, "RemoveDisallowedRelicsFromDeques")

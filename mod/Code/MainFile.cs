@@ -75,8 +75,7 @@ public partial class MainFile : Node
                         $"{FragmentPool.PassiveEffects.Count} passives");
 
             Logger.Info($"[{ModId}] initialized: enabled={AutoAnthonyRelicsConfig.Enabled}, " +
-                        $"replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics}, " +
-                        $"keepModded={AutoAnthonyRelicsConfig.KeepModdedRelics}");
+                        $"replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics}");
         }
         catch (Exception e)
         {
