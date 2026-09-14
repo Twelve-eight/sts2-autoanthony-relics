@@ -1,40 +1,28 @@
-## 第三轮复审 (2026-09-14)
+## 第四轮复审 (2026-09-14): 新保护避免异常, 但仍生成无效组合
 
-当前隔离构建 exit 0, 0 warning/0 error. 本轮重新读取当前生成器, registry, seed capture 和 combat hooks, 未运行 Anthony relic probe 或真实游戏.
+当前 HEAD `7a0c2de`, 包含 `c8aa7ab` 生命周期修复和后来 `CombatScopedOpcodes`/逐效果 catch. 隔离 Release 构建 exit 0, 0 warnings/0 errors. fresh relic-probe 为 27 个 PASS 行和 `PROBE OK`; 实际加载的 DLL 哈希与本轮 build 相同, 新鲜度守卫通过.
 
-本轮隔离 `relic-probe` 返回 `PROBE OK`: 140 atoms, 25 supported, 26 rejected, 60 slots, 同 seed 字节一致, 200 seeds soak, 全 trigger/effect reachable. 但样例文本仍显示 `Gain 8 Vigor` 被渲染为 `获得8点勇气`,而术语表/权威转储要求 `Vigor -> 活力`. 这不是生成身份问题,是当前中文渲染/术语回归缺陷;不能用 probe 的 bilingual render 通过掩盖译名错误. 证据: `../astra-advice-evidence/2026-09-14/anthony-relic-probe.txt:51-54`. 
+### P1 AAR-R4-01: 获得时战斗效果被静默变成空效果
 
-### P2 当前 pool fingerprint 未包含显式算法版本
+`REPRO_ISOLATED`. `Generation/RelicGenerator.cs:119-122,162-175` 的兼容过滤只禁 `gold_gained -> gain_gold`, 没有表达 trigger 提供什么上下文. 新 `Models/AnthonyRelicModel.cs:589-629` 在无 PlayerCombatState 时跳过全部战斗 opcode, 逐效果 catch 又把失败变成日志后继续.
 
-`RelicFragments.cs:71-89` 的 `Fingerprint` 由当前 trigger/effect keys 拼成, `RelicGenerator.SeedVersion` 则是独立常量 `relics-v1`; `AnthonyRelicRunRegistry.cs` 只把 seed 与 pool fingerprint 拼成 key. 如果生成算法改变但 fragment keys 不变且没有同步升级 `SeedVersion`/存档版本, 同进程旧 cache 仍可能复用. 这是版本契约 SOURCE, 不是本轮实机复现. 生成版本,catalog/ledger 身份和存档中的有效定义应成为明确的同一身份边界.
+当前真实生成器对 20 个确定 seed 生成 1200 个槽位, 其中 34 件为 `obtained` 且只包含 combat effects. 例如 `ASTRA-R4-OBTAIN-0`, slot 49: "Upon pickup, apply 1 Vulnerable to ALL enemies." 对无战斗上下文的 owner 调当前执行器, 输出 `effect apply_power/vulnerable skipped: no combat context at this trigger`, Task 成功完成. 既有 relic-probe 同样展示 "Upon pickup, gain 14 Block" 却全绿.
 
-### P2 seed 和 combat 生命周期仍未闭合
+这是 agent 新保护没有闭合的根因: 保住 UI/获得链并不等于履行遗物效果. 34/1200 是本轮指定样本, 不是所有 seed 的概率估计. 本轮直接运行 generator 和 effect executor, 没有实际 RelicCmd.Obtain/UI/战斗.
 
-`RunSeedCapturePatch.cs:37-72` 在新单机/新多人 prefix 与 `Launch` 捕获 seed,但没有 `CleanUp` 清空 `AnthonyRelicRunRegistry.CurrentRunSeed`. `AnthonyRelicModel.cs:508-561` 的 debuff bag 已按 owner net id 分桶并在 `AfterCombatEnd` 清空,较上一轮 process-global 形状更窄;仍未证明 owner id=0 fallback,断线/重连和多个 combat 生命周期不会复用. 本轮没有真实获取,战斗,存读档或多人验证.
+建议: 给 trigger/effect 记录可用/必需上下文, 生成时拒绝缺上下文的绑定; 对获得/进房/战斗结束等阶段分别处理, 不只特别排除一个 opcode. 如果产品选择把收益延迟到下场战斗, 必须连文案/存档/一次性执行状态一起定义, 不能偷换语义. 已生成旧局不能静默重抽, 需显式版本/恢复策略. 保留真实失败可观测性, 不把所有异常吞掉等同于修复.
 
-### P2 生成覆盖范围仍只由静态 guard 证明
+验收: 原子和触发单独可达之外, 每个允许组合在其真实 trigger 阶段产生描述中的效果; 不允许组合在生成时被拒, 已持有定义不因修兼容表改变. 获得链异常不会卡 UI, 也不会显示成功却没效果.
 
-`AnthonyRelicModel.IsAllowed` 依赖 enabled/seed/pool, bag replacement 只在 `Populate` postfix 中执行并保留 BaseLib custom relic. 这支持共享池替换的源码意图,不证明 treasure/shop/event/dig/rest 的每个真实获得入口,也不证明与 Qurious 双开时最终池和 duplicate-id winner. 继续以 vertical slice 和实际获得路径验收,不以 60 slot probe 代替.
+### 当前已修复或撤回
 
-### P2 AAR-4: seed-only cache identity is not sufficient
+- `REPRO_ISOLATED_PASS`: `ResetForRunEnd` 清 active seed, 菜单 DefinitionFor 返回 null, cache 对象重建但内容相同. 旧 "没有 CleanUp" finding 关闭到此范围, 未替代真实引擎 teardown.
+- `SOURCE`: cache key 现在包含 seed, `RelicGenerator.SeedVersion`, pool fingerprint; 不再保留 "seed-only/缺 SeedVersion" 作为当前缺陷. 跨构建存档定义仍无持久身份保证.
+- `SOURCE`: debuff 按 owner net id 分桶, owner-0 的单人可达性已写契约; 没有合法双 owner 共用 0 桶的证据, 不继续以假想并行战斗定罪.
+- 形状权重已被实现会话明确选为设计, 不再把 Kind|Condition 合并本身当必然采样错误.
+- **撤回第三轮 Vigor 负面结论**: 原探针加载旧 Debug DLL, 属 `STALE_EVIDENCE`. 当前 fresh probe 第 55 行为 `获得8点活力.`; 不是当前产品仍用错误译名. 旧错误输出仅保留为事故证据.
 
-`AnthonyRelicRunRegistry.cs:18-39` uses only `runSeed` as the cache key, but `RelicGenerator.Generate(runSeed,pool)` depends on `RelicFragmentPool`; `RelicGenerator.SeedVersion` is hardcoded as `relics-v1`. A ledger/catalog/pool change or algorithm change without a version bump can make the same seed mean a different 60-slot set while the process cache returns the old set. Add catalog/ledger/algorithm identity to the key, or persist exact generated definitions/effective inputs in the run save. Same-process same-seed output is not cross-build or save-load proof.
-
-### P2 AAR-5: trigger source multiplicity is collapsed
-
-`Generation/RelicFragments.cs:95-157` stores triggers by `TriggerFragment.Key`, which is only `Kind|Condition`. Multiple supported source atoms with the same trigger semantics become one candidate, while `SupportedAtomCount` still reports all ledger entries. This changes sampling weight unless semantic-shape weighting is explicitly intended. Decide and document atom-weight versus shape-weight semantics; make the pool identity/probe reflect that choice.
-
-### P2 AAR-6: enemy-debuff merge state is process-global
-
-`Models/AnthonyRelicModel.cs:470-512` uses a static `PendingEnemyDebuffs` dictionary keyed only by power type. It clears on combat end and flushes on first turn start, but carries no player/run/combat identity. If overlapping combat contexts or multiple run instances can invoke these hooks before flush, one owner's contributions can be applied to another owner's enemies. No real multi-combat reproduction was run; the source ownership boundary is insufficiently explicit. Key state by combat/owner or store it on the owning run/combat context, then test combat-end-before-first-turn and two owners.
-
-### P2 AAR-7: seed lifecycle cleanup is absent from the current read set
-
-`RunSeedCapturePatch.cs` captures on new singleplayer, new multiplayer and `Launch`, but no current `RunManager.CleanUp` patch was found for `AnthonyRelicRunRegistry.CurrentRunSeed`. The comment says the registry tracks the active run, but a post-run menu or next run can observe stale process-global seed state. Prove and implement the cleanup contract before calling `CurrentRunSeed` run-scoped.
-
-### 仍需真实验证
-
-No real obtain/trigger/save-load/reload/reconnect/multiplayer or settings interaction was run. The probe's deterministic output must not be upgraded to relic gameplay acceptance.
+证据: [binary-boundaries.json](../astra-advice-evidence/2026-09-14/round4/binary-boundaries.json), [当前 relic-probe](../astra-advice-evidence/2026-09-14/round4/anthony-relic.txt), [DLL 绑定](../astra-advice-evidence/2026-09-14/round4/probe-results.json). 未改产品源码, 未部署/操作游戏/push. 以下为历史返工材料, 不能将旧数据/旧路径继续当当前生产行为.
 
 # Astra advice - AutoAnthonyRelics 返工方向与语义验收
 
