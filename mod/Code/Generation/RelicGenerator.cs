@@ -102,13 +102,30 @@ public sealed record GeneratedRelicDefinition(
 public static class RelicGenerator
 {
     public const int SlotCount = 60;
-    public const string SeedVersion = "relics-v1";
+
+    /// <summary>
+    /// v2: downside pool (user order 2026-09-15). Pool contents changed (11
+    /// downside fragments from all relic sources incl. Ancient/Event), so the
+    /// version bump keeps the run-registry cache key cleanly separated from
+    /// v1 saves' generated sets.
+    /// </summary>
+    public const string SeedVersion = "relics-v2";
 
     /// <summary>Chance a slot samples a second effect (both bound to the trigger).</summary>
     private const int TwoEffectChancePercent = 30;
 
     /// <summary>Chance a slot is a passive-only relic (modifier fragments, no trigger).</summary>
     private const int PassiveRelicChancePercent = 15;
+
+    /// <summary>
+    /// Downside fragments (EffectFragment.IsDownside) weigh 140 vs 100 for
+    /// everything else: their per-pick share is 1.4x uniform, i.e. their
+    /// appearance probability is raised 40% relative to the pre-downside
+    /// distribution (user order 2026-09-15). Deliberately NOT a config key -
+    /// no config may participate in generation (see GeneratedRelicDefinition).
+    /// </summary>
+    private const int DownsideWeight = 140;
+    private const int NormalWeight = 100;
 
     /// <summary>
     /// A gain_gold effect on a gold_gained trigger would recurse (gaining gold
@@ -164,9 +181,10 @@ public static class RelicGenerator
                 int effectCount = random.Next(100) < TwoEffectChancePercent ? 2 : 1;
                 for (int i = 0; i < effectCount; i++)
                 {
-                    EffectFragment? picked = PickUniquely(random, pool.TriggeredEffects,
+                    EffectFragment? picked = PickWeightedUniquely(random, pool.TriggeredEffects,
                         e => effects.Exists(x => x.ShapeKey == e.ShapeKey),
-                        e => !Forbidden(trigger, e) && effects.All(x => x.ShapeKey != e.ShapeKey));
+                        e => !Forbidden(trigger, e) && effects.All(x => x.ShapeKey != e.ShapeKey),
+                        WeightOf);
                     if (picked is null)
                     {
                         break; // pool exhausted against the constraints; one-effect relic
@@ -205,9 +223,10 @@ public static class RelicGenerator
                     int effectCount = random.Next(100) < TwoEffectChancePercent ? 2 : 1;
                     for (int i = 0; i < effectCount; i++)
                     {
-                        EffectFragment? picked = PickUniquely(random, pool.TriggeredEffects,
+                        EffectFragment? picked = PickWeightedUniquely(random, pool.TriggeredEffects,
                             e => effects.Exists(x => x.ShapeKey == e.ShapeKey),
-                            e => !Forbidden(trigger, e) && effects.All(x => x.ShapeKey != e.ShapeKey));
+                            e => !Forbidden(trigger, e) && effects.All(x => x.ShapeKey != e.ShapeKey),
+                            WeightOf);
                         if (picked is null)
                         {
                             break;
@@ -253,24 +272,57 @@ public static class RelicGenerator
         Func<T, bool> markUsed,
         Func<T, bool> eligible)
         where T : class
+        => PickWeightedUniquely(random, pool, markUsed, eligible, _ => NormalWeight);
+
+    /// <summary>
+    /// Weighted variant of PickUniquely: uniform over total weight, no
+    /// replacement within the relic. Integer weights only - DeterministicRandom
+    /// has no floating API and integer arithmetic keeps the stream identical
+    /// across platforms.
+    /// </summary>
+    private static T? PickWeightedUniquely<T>(
+        DeterministicRandom random,
+        IReadOnlyList<T> pool,
+        Func<T, bool> markUsed,
+        Func<T, bool> eligible,
+        Func<T, int> weightOf)
+        where T : class
     {
-        // Uniform over the eligible subset, no replacement within the relic.
         var candidates = new List<int>();
+        long totalWeight = 0;
         for (int i = 0; i < pool.Count; i++)
         {
             if (eligible(pool[i]))
             {
                 candidates.Add(i);
+                totalWeight += weightOf(pool[i]);
             }
         }
         if (candidates.Count == 0)
         {
             return null;
         }
-        T picked = pool[candidates[random.Next(candidates.Count)]];
+        T picked = pool[candidates[^1]];
+        if (totalWeight > 0)
+        {
+            int roll = random.Next((int)Math.Min(totalWeight, int.MaxValue));
+            int accumulated = 0;
+            foreach (int index in candidates)
+            {
+                accumulated += weightOf(pool[index]);
+                if (roll < accumulated)
+                {
+                    picked = pool[index];
+                    break;
+                }
+            }
+        }
         markUsed(picked);
         return picked;
     }
+
+    private static int WeightOf(EffectFragment effect) =>
+        effect.IsDownside ? DownsideWeight : NormalWeight;
 
     private const string ModId = "AutoAnthonyRelics";
 }

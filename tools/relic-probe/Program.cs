@@ -69,8 +69,8 @@ internal static class Program
         RelicAtomPool atoms = RelicAtomData.LoadAtoms();
         RelicLedger ledger = RelicAtomData.LoadLedger();
         RelicFragmentPool pool = RelicFragmentPool.Build(atoms, ledger);
-        Check(atoms.Atoms.Count == 140, "atom pool loads 140 atoms", $"{atoms.Atoms.Count}");
-        Check(ledger.Supported.Count == 25, "ledger has 25 supported entries", $"{ledger.Supported.Count}");
+        Check(atoms.Atoms.Count == 146, "atom pool loads 146 atoms", $"{atoms.Atoms.Count}");
+        Check(ledger.Supported.Count == 36, "ledger has 36 supported entries", $"{ledger.Supported.Count}");
         Check(ledger.Rejected.Count == 26, "ledger has 26 rejected entries", $"{ledger.Rejected.Count}");
         Check(pool.Triggers.Count >= 10, "trigger fragments >= 10", $"{pool.Triggers.Count}");
         Check(pool.TriggeredEffects.Count >= 12, "triggered effect fragments >= 12", $"{pool.TriggeredEffects.Count}");
@@ -92,19 +92,26 @@ internal static class Program
 
         // ---- 3. Executor drift: every triggered effect opcode/variant/target must be
         // in the executor's supported set (mirrors AnthonyRelicModel's switch;
-        // variant is wildcard there except for apply_power).
+        // variant is significant for apply_power and the downside opcodes
+        // lose_hp / lose_gold / add_curse, wildcard "-" elsewhere).
+        var variantSignificant = new HashSet<string> { "apply_power", "lose_hp", "lose_gold", "add_curse" };
         var supported = new HashSet<string>
         {
             "apply_power|vigor|self|False", "apply_power|strength|self|False", "apply_power|thorns|self|False",
             "apply_power|vulnerable|all_enemies|False", "gain_block|-|self|False", "heal|-|self|False",
             "gain_energy|-|self|False", "draw_cards|-|self|False", "gain_max_hp|-|self|False",
             "gain_gold|-|self|False", "gain_max_potion|-|self|False", "deal_damage|-|all_enemies|False",
+            // Downside pool (user order 2026-09-15).
+            "lose_hp|unblockable|self|False", "lose_hp|immediate|self|False", "lose_max_hp|-|self|False",
+            "lose_gold|immediate|self|False", "lose_gold|all|self|False",
+            "add_curse|greed|self|False", "add_curse|curse_of_the_bell|self|False",
+            "add_curse|enthralled|self|False", "add_curse|folly|self|False",
         };
         var passiveSupported = new HashSet<string> { "modify_hand_draw" };
         bool executorOk = true;
         foreach (EffectFragment effect in pool.TriggeredEffects)
         {
-            string variant = effect.Opcode == "apply_power" ? effect.Variant ?? "-" : "-";
+            string variant = variantSignificant.Contains(effect.Opcode) ? effect.Variant ?? "-" : "-";
             string key = $"{effect.Opcode}|{variant}|{effect.Target}|{effect.IsPassive}";
             if (!supported.Contains(key))
             {
@@ -139,11 +146,37 @@ internal static class Program
         Check(Find(pool.PassiveEffects, e => e.Opcode == "modify_hand_draw" && e.Amount == -2)?.Condition == "first_turn",
             "passive condition rides the effect (BigMushroom first_turn)");
 
+        // ---- 4b. Downside pool (user order 2026-09-15): downside fragments
+        // from ALL relic sources incl. Ancient/Event, weighted 140 vs 100.
+        var downsides = pool.TriggeredEffects.Where(e => e.IsDownside).ToList();
+        Check(downsides.Count == 11, "downside fragments: 11", $"{downsides.Count}");
+        Check(downsides.All(d => !d.IsPassive), "all downsides are triggered effects");
+        Check(downsides.Count(d => d.Opcode == "add_curse") == 4, "four curse downsides");
+        Check(downsides.Any(d => d.Opcode == "add_curse" && d.Variant == "greed"),
+            "CursedPearl Greed curse present");
+        Check(downsides.Count(d => d.Opcode == "lose_max_hp") == 2
+            && downsides.Any(d => d.Opcode == "lose_max_hp" && d.Amount == 12)
+            && downsides.Any(d => d.Opcode == "lose_max_hp" && d.Amount == 9),
+            "lose_max_hp: 12 (LeafyPoultice) + 9 (SereTalon)");
+        Check(downsides.Any(d => d.Opcode == "lose_gold" && d.Variant == "all"),
+            "SilkenTress lose-ALL-gold present");
+        Check(downsides.Any(d => d.Opcode == "lose_gold" && d.Variant != "all" && d.Amount == 3),
+            "SealOfGold lose 3 gold present");
+        Check(downsides.Count(d => d.Opcode == "lose_hp") == 3
+            && downsides.Count(d => d.Opcode == "lose_hp" && d.Variant == "unblockable") == 2,
+            "self-damage: 3 fragments, 2 unblockable (FragrantMushroom/RoyalPoison)");
+
         // ---- 5. Value sanity: no negative amounts outside the draw modifier.
+        // lose_gold variant "all" (SilkenTress) and add_curse carry no numeric
+        // slot by design - the executor loses owner.Gold / adds the Variant's
+        // curse card.
         bool valueOk = true;
         foreach (EffectFragment effect in pool.TriggeredEffects.Concat(pool.PassiveEffects))
         {
-            if (effect.Opcode != "modify_hand_draw" && effect.Amount <= 0)
+            bool noAmountByDesign = effect.Opcode == "modify_hand_draw"
+                || effect.Opcode == "add_curse"
+                || (effect.Opcode == "lose_gold" && effect.Variant == "all");
+            if (!noAmountByDesign && effect.Amount <= 0)
             {
                 valueOk = false;
                 Console.WriteLine($"  bad amount: {effect.Key} amount={effect.Amount}");
@@ -217,6 +250,33 @@ internal static class Program
         Check(usageEffects.Count == pool.TriggeredEffects.Count + pool.PassiveEffects.Count,
             "soak: every effect fragment reachable",
             $"{usageEffects.Count}/{pool.TriggeredEffects.Count + pool.PassiveEffects.Count}");
+
+        // ---- 9. Downside weighting: downside fragments weigh 140 vs 100, so
+        // their observed share among TRIGGERED effect picks must sit clearly
+        // above the uniform share but below 2x (passive picks excluded - they
+        // can never be downsides and would dilute both sides differently).
+        int downsidePicks = 0, triggeredPicks = 0;
+        for (int i = 0; i < 100; i++)
+        {
+            foreach (var d in RelicGenerator.Generate($"weight-{i}", pool))
+            foreach (var e in d.Effects)
+            {
+                if (e.IsPassive)
+                {
+                    continue;
+                }
+                triggeredPicks++;
+                if (e.IsDownside)
+                {
+                    downsidePicks++;
+                }
+            }
+        }
+        double uniformShare = (double)pool.TriggeredEffects.Count(e => e.IsDownside) / pool.TriggeredEffects.Count;
+        double observedShare = triggeredPicks == 0 ? 0 : (double)downsidePicks / triggeredPicks;
+        Check(observedShare > uniformShare * 1.15 && observedShare < uniformShare * 1.65,
+            "downside share ~= 1.4x uniform (weighted 140 vs 100)",
+            $"observed {observedShare:F3} vs uniform {uniformShare:F3} over {triggeredPicks} picks");
 
         Console.WriteLine();
         Console.WriteLine(_failures == 0 ? "PROBE OK" : $"PROBE FAILED: {_failures} check(s)");

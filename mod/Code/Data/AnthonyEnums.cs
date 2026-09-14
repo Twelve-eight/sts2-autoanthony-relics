@@ -75,6 +75,13 @@ public enum SpecOpcode
     ModifyOstyHpLoss,
     ModifyCardPlayCount,
     ModifyPowerGiven,
+    // Downside opcodes (downside pool, user order 2026-09-15): fragments
+    // harvested from ALL relic sources incl. Ancient/Event relics. add_curse
+    // resolves the specific curse card via its Variant (see
+    // AnthonyRelicModel.CurseTypes); lose_gold variant "all" means the whole
+    // purse, any other variant is the fixed amount.
+    LoseGold,
+    AddCurse,
     Unknown,
 }
 
@@ -184,6 +191,8 @@ internal static class EnumParsing
             ["modify_osty_hp_loss"] = SpecOpcode.ModifyOstyHpLoss,
             ["modify_card_play_count"] = SpecOpcode.ModifyCardPlayCount,
             ["modify_power_given"] = SpecOpcode.ModifyPowerGiven,
+            ["lose_gold"] = SpecOpcode.LoseGold,
+            ["add_curse"] = SpecOpcode.AddCurse,
         };
 
     private static readonly Dictionary<string, SpecTarget> Targets =

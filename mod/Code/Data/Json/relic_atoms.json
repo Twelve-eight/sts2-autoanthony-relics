@@ -1,7 +1,7 @@
 {
  "schema": "relic-atoms/v1",
  "source": "MegaCrit.Sts2.Core.Models.Relics (engine decompile)",
- "atomCount": 140,
+ "atomCount": 146,
  "atoms": [
   {
    "Id": "Akabeko#AfterSideTurnStart#0",
@@ -3081,6 +3081,115 @@
     },
     "Trigger": null
    }
+  },
+ {
+  "Id": "CursedPearl#AfterObtained#1",
+  "Source": "CursedPearl",
+  "Rarity": "Ancient",
+  "Spec": {
+   "Opcode": "add_curse",
+   "Variant": "greed",
+   "Target": "self",
+   "Values": [],
+   "Condition": null,
+   "Trigger": {
+    "Kind": "obtained",
+    "Lifetime": "immediate"
+   }
   }
+ }
+,
+ {
+  "Id": "CallingBell#AfterObtained#1",
+  "Source": "CallingBell",
+  "Rarity": "Ancient",
+  "Spec": {
+   "Opcode": "add_curse",
+   "Variant": "curse_of_the_bell",
+   "Target": "self",
+   "Values": [],
+   "Condition": null,
+   "Trigger": {
+    "Kind": "obtained",
+    "Lifetime": "immediate"
+   }
+  }
+ }
+,
+ {
+  "Id": "BloodSoakedRose#AfterObtained#1",
+  "Source": "BloodSoakedRose",
+  "Rarity": "Ancient",
+  "Spec": {
+   "Opcode": "add_curse",
+   "Variant": "enthralled",
+   "Target": "self",
+   "Values": [],
+   "Condition": null,
+   "Trigger": {
+    "Kind": "obtained",
+    "Lifetime": "immediate"
+   }
+  }
+ }
+,
+ {
+  "Id": "PreservedFog#AfterObtained#1",
+  "Source": "PreservedFog",
+  "Rarity": "Ancient",
+  "Spec": {
+   "Opcode": "add_curse",
+   "Variant": "folly",
+   "Target": "self",
+   "Values": [],
+   "Condition": null,
+   "Trigger": {
+    "Kind": "obtained",
+    "Lifetime": "immediate"
+   }
+  }
+ }
+,
+ {
+  "Id": "SealOfGold#AfterSideTurnStart#1",
+  "Source": "SealOfGold",
+  "Rarity": "Ancient",
+  "Spec": {
+   "Opcode": "lose_gold",
+   "Variant": "immediate",
+   "Target": "self",
+   "Values": [
+    {
+     "Id": "amount",
+     "BaseValue": 3,
+     "Source": "fixed",
+     "Offset": 0,
+     "Upgradable": false
+    }
+   ],
+   "Condition": null,
+   "Trigger": {
+    "Kind": "turn_start",
+    "Lifetime": "combat"
+   }
+  }
+ }
+,
+ {
+  "Id": "SilkenTress#AfterObtained#1",
+  "Source": "SilkenTress",
+  "Rarity": "Ancient",
+  "Spec": {
+   "Opcode": "lose_gold",
+   "Variant": "all",
+   "Target": "self",
+   "Values": [],
+   "Condition": null,
+   "Trigger": {
+    "Kind": "obtained",
+    "Lifetime": "immediate"
+   }
+  }
+ }
  ]
 }

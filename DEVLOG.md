@@ -641,3 +641,23 @@ astra 第三轮复审落盘 (根 `astra-advice.md` + 各项目 `astra-advice.md`
 随后当前仓库已出现 `c8aa7ab v0.1.4`: cache key 加入 `RelicGenerator.SeedVersion`, 新增 CleanUp reset, owner-0 可达性契约和发布文本更正. 因此第三轮 `anthony-relic-probe.txt` 的生成通过结果仍可用, 但不能证明 v0.1.4 的新路径. 下一轮必须以 v0.1.4 重建并复跑新鲜度守卫, 再覆盖真实遗物获得, combat, save/load, rejoin, CleanUp 和工坊发布物.
 
 术语恢复: Vigor 的权威译名是 `活力`, 不是 `勇气`. 证据与截点记录在 `G:\\omp works\\astra-advice-evidence\\2026-09-14\\handoff-state.json`.
+
+## 2026-09-14 astra 第四轮代码复审
+
+源码截点 7a0c2de. 隔离 Release 0 warnings/0 errors; fresh relic-probe 27 PASS + PROBE OK, 首行 freshness 通过, 实际加载 DLL 与本轮 build hash 相同. Vigor 当前输出为活力; 撤回第三轮 stale Debug 负面结论. SeedVersion key 和 ResetForRunEnd 已分别 SOURCE/隔离验证, 不再重复列缺失.
+
+P1 AAR-R4-01: 新 CombatScopedOpcodes guard 没有修生成上下文. 20 个固定 seed/1200 槽位有 34 件 obtained 且只有 combat effects; 实际执行器在 owner 无 combat 时记录 skipped 并成功返回. 获得遗物不卡死不等于描述的效果实现. 需要生成期 trigger/effect 上下文兼容性与旧局版本策略, 不能静默重抽或只加 catch.
+
+证据: ../astra-advice-evidence/2026-09-14/round4/binary-boundaries.json, anthony-relic.txt, review-results.json. 实际 generator/执行器已运行, 未跑 RelicCmd.Obtain/UI/战斗. 未改产品源码/部署/实机配置/push.
+
+## 2026-09-15 v0.1.6 下行词条池 (用户指令: 全遗物负面词条入池 + 出现率+40%)
+
+需求: 所有遗物的负面词条加入东尼遗物池, 包括本身不参与再生成的先古(Ancient)/事件(Event)遗物的负面词条; 下行碎片出现概率提高 40%.
+
+全量审计: 300 个引擎遗物源码 grep 下行 API (AddCurseToDeck/LoseMaxHp/LoseGold/自伤), 逐文件手读定案 11 个碎片级负面词条 (13 候选中 5 个为提取器把"随机敌人伤害"误标 lose_hp, 已排除). 4 诅咒 (CursedPearl 贪婪/CallingBell 咒铃/BloodSoakedRose Enthralled/PreservedFog Folly, 均拾取), 2 失生命上限 (LeafyPoultice 12/SereTalon 9, 拾取), 2 失金币 (SealOfGold 3/回合开始带 gold>=3 守卫; SilkenTress 全部金币/拾取), 3 自伤 (FragrantMushroom 15 不可格挡/PrecariousShears 16 可格挡/RoyalPoison 4 不可格挡首回合).
+
+数据: relic_atoms.json 140→146 (6 新原子: 4 诅咒 + SealOfGold#1 + SilkenTress#1); 账本 25→36 supported (11 新, 其中 FragrantMushroom/RoyalPoison fix target self + variant unblockable, PrecariousShears fix amount 2→16), rejected 修正 (CursedPearl#* 收窄到 #0, 移除 FragrantMushroom#* 通配, 新增 SealOfGold#0 拒绝记录变量互换错). 提取器 Variant 默认 "immediate", unblockable 经 ledger fix 注入.
+
+代码: SpecOpcode+LoseGold/AddCurse; EffectFragment.IsDownside (opcode 判定); RelicGenerator SeedVersion→relics-v2 + 整数加权采样 (下行 140 vs 普通 100, PickWeightedUniquely); RelicText EN/ZHS 新用例 (诅咒文本通用化 "add 1 Curse to your deck"/"将1张诅咒牌加入你的牌堆", 具体诅咒由牌自身本地化); AnthonyRelicModel 执行器 5 新 case + CurseTypes 反射泛型 AddCurseToDeck<T> + HasUponPickupEffect 动态覆写 (引擎契约: 带拾取效果=不可交易). 设计硬约束: 加权系数是常量不是配置项 — 生成定义不得受配置影响 (seed 纯函数契约).
+
+验证: Release 0 警告 0 错误; relic-probe 37 PASS + PROBE OK (含新鲜度守卫; 新增 11 碎片组成断言 + 1.4 权重行为断言: 100 seeds 触发型抽取下行份额在 uniform×[1.15,1.65] 区间). 部署哈希与构建一致. 未实机验证: 真实拾取下行遗物 (诅咒入牌堆/失上限/失金币/自伤), 用户冒烟; 工坊推送待用户 2FA.

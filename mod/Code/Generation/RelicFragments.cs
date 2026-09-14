@@ -33,6 +33,19 @@ public sealed record EffectFragment(
 
     private string ValuesKey => string.Join(",", Values.Select(v => $"{v.Id}:{v.Value}"));
 
+    /// <summary>
+    /// Downside opcodes (downside pool, user order 2026-09-15): effects that
+    /// hurt the owner. The generator weighs these fragments 1.4x so they
+    /// appear 40% more often than uniform sampling would place them. add_curse
+    /// fragments differ per curse via Variant, so Key/ShapeKey stay distinct.
+    /// </summary>
+    public static readonly HashSet<string> DownsideOpcodes = new(StringComparer.Ordinal)
+    {
+        "lose_hp", "lose_max_hp", "lose_gold", "add_curse",
+    };
+
+    public bool IsDownside => DownsideOpcodes.Contains(Opcode);
+
     public int Amount => ValueOf("amount", 0);
 
     public int ValueOf(string id, int fallback = 0)

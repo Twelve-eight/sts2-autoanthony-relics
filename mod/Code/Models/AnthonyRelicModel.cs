@@ -320,6 +320,12 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         await ExecuteEffectsAsync(effects, owner);
     }
 
+    // Engine contract (RelicModel.IsTradable): relics with an upon-pickup
+    // effect are non-tradable. Our obtain-triggered relics - including the
+    // downside-pool curses / max-HP / gold / self-damage pickups - follow the
+    // same rule the engine applies to SereTalon / CursedPearl / etc.
+    public override bool HasUponPickupEffect => Definition?.Trigger?.Kind == "obtained";
+
     public override async Task AfterObtained()
     {
         var (owner, trigger, effects) = Resolve("obtained");
@@ -592,10 +598,30 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     // PlayerCombatState, killing the obtain chain and freezing the game's UI
     // in a render loop (real incident 2026-09-14). Run-scoped opcodes (heal,
     // gain_max_hp, gain_gold, gain_max_potion, modify_hand_draw) are safe.
+    // Downside opcodes are NOT in this set on purpose: the engine itself fires
+    // obtain-time self-damage / LoseMaxHp / LoseGold / AddCurseToDeck outside
+    // combat (FragrantMushroom, PrecariousShears, LeafyPoultice, SilkenTress,
+    // CursedPearl), and lose_hp's only triggers are obtained/turn_start.
     private static readonly HashSet<string> CombatScopedOpcodes = new(StringComparer.Ordinal)
     {
         "apply_power", "gain_block", "gain_energy", "draw_cards", "deal_damage",
     };
+
+    // Downside pool (user order 2026-09-15): curse fragments carry the source
+    // relic's exact curse card in their Variant. AddCurseToDeck<T> is generic
+    // with no non-generic overload, so resolution goes through reflection -
+    // the fragment set is closed and probe-verified; a miss is a fuse-caught
+    // throw, never a silent no-op.
+    private static readonly Dictionary<string, Type> CurseTypes = new(StringComparer.Ordinal)
+    {
+        ["greed"] = typeof(MegaCrit.Sts2.Core.Models.Cards.Greed),
+        ["curse_of_the_bell"] = typeof(MegaCrit.Sts2.Core.Models.Cards.CurseOfTheBell),
+        ["enthralled"] = typeof(MegaCrit.Sts2.Core.Models.Cards.Enthralled),
+        ["folly"] = typeof(MegaCrit.Sts2.Core.Models.Cards.Folly),
+    };
+
+    private static readonly MethodInfo? s_addCurse =
+        typeof(CardPileCmd).GetMethod("AddCurseToDeck", new[] { typeof(Player) });
 
     private async Task ExecuteEffectsAsync(IReadOnlyList<EffectFragment> effects, Player owner)
     {
@@ -674,10 +700,52 @@ public abstract class AnthonyRelicModel : CustomRelicModel
                 case ("modify_hand_draw", _, "self"):
                     // Handled by the ModifyHandDraw query override; nothing to run.
                     break;
+                // Downside pool (user order 2026-09-15): source-exact shapes.
+                case ("lose_hp", "unblockable", "self"):
+                    // True HP loss, engine ValueProp.Unblockable | Unpowered
+                    // (RoyalPoison / FragrantMushroom).
+                    await CreatureCmd.Damage(context, owner.Creature, amount,
+                        ValueProp.Unblockable | ValueProp.Unpowered, null, null);
+                    break;
+                case ("lose_hp", _, "self"):
+                    // Blockable self-damage (PrecariousShears passes a plain
+                    // Unpowered DamageVar).
+                    await CreatureCmd.Damage(context, owner.Creature, amount,
+                        ValueProp.Unpowered, null, null);
+                    break;
+                case ("lose_max_hp", _, "self"):
+                    await CreatureCmd.LoseMaxHp(context, owner.Creature, amount, isFromCard: false);
+                    break;
+                case ("lose_gold", "all", "self"):
+                    // SilkenTress: the whole purse.
+                    await PlayerCmd.LoseGold(owner.Gold, owner);
+                    break;
+                case ("lose_gold", _, "self"):
+                    // SealOfGold guards on gold >= amount before paying; mirror
+                    // it so a broke player is not driven negative.
+                    if (owner.Gold >= amount)
+                    {
+                        await PlayerCmd.LoseGold(amount, owner);
+                    }
+                    break;
+                case ("add_curse", _, _):
+                    await AddCurseAsync(effect, owner);
+                    break;
                 default:
                     throw new InvalidOperationException(
                         $"unsupported relic effect {effect.Opcode}/{effect.Variant}/{effect.Target} on atom {effect.SourceAtom}");
             }
         }
+    }
+
+    private async Task AddCurseAsync(EffectFragment effect, Player owner)
+    {
+        if (s_addCurse is null || !CurseTypes.TryGetValue(effect.Variant ?? "", out Type? curseType))
+        {
+            throw new InvalidOperationException(
+                $"unsupported curse variant {effect.Variant} on atom {effect.SourceAtom}");
+        }
+        var task = (Task)s_addCurse.MakeGenericMethod(curseType).Invoke(null, new object?[] { owner })!;
+        await task;
     }
 }

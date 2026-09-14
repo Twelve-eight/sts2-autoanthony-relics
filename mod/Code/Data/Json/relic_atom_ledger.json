@@ -2,6 +2,7 @@
   "schema": "aarelic-ledger-v1",
   "policy": "Deny-by-default. Only entries listed here with status=supported enter the generation pool. Every fix records the verified correction; every rejection records why. Evidence paths are relative to sts2-spire1/research/engine-dllsrc/MegaCrit.Sts2.Core.Models.Relics/.",
   "auditor": "main session 2026-09-12; each entry hand-checked against the named engine source file (six-item reconciliation: when / who / target / value / condition / state)",
+  "downsidePool": "user order 2026-09-15: downside fragments from ALL relic sources (including Ancient/Event relics whose whole cards never regenerate) enter the generation pool; downside shapes carry weight 140 vs 100 in RelicGenerator",
   "supported": [
     { "atomId": "Akabeko#AfterSideTurnStart#0", "fix": {}, "evidence": "Akabeko.cs", "note": "vigor 8 self, first turn; host applies owner-participant gate" },
     { "atomId": "Anchor#BeforeCombatStart#0", "fix": {}, "evidence": "Anchor.cs", "note": "block 10 at combat start" },
@@ -27,7 +28,18 @@
     { "atomId": "BigMushroom#ModifyHandDraw", "fix": { "values": { "amount": -2 }, "condition": "first_turn" }, "evidence": "BigMushroom.cs:36-47", "note": "sign verified: cardsToDraw - 2 on turn 1; extractor stored +2" },
     { "atomId": "CaptainsWheel#AfterBlockCleared#0", "fix": { "condition": "turn_equals_3" }, "evidence": "CaptainsWheel.cs", "note": "engine gates TurnNumber == 3; block 18 verified against BlockVar" },
     { "atomId": "HornCleat#AfterBlockCleared#0", "fix": { "condition": "turn_equals_2" }, "evidence": "HornCleat.cs", "note": "engine gates TurnNumber == 2; block 14 verified" },
-    { "atomId": "MeatOnTheBone#AfterCombatVictoryEarly#0", "fix": { "condition": "hp_below_half" }, "evidence": "MeatOnTheBone.cs", "note": "engine: heal 12 at combat victory if HP <= 50% (HpThreshold 50); target_dead was extractor garbage" }
+    { "atomId": "MeatOnTheBone#AfterCombatVictoryEarly#0", "fix": { "condition": "hp_below_half" }, "evidence": "MeatOnTheBone.cs", "note": "engine: heal 12 at combat victory if HP <= 50% (HpThreshold 50); target_dead was extractor garbage" },
+    { "atomId": "LeafyPoultice#AfterObtained#0", "fix": {}, "evidence": "LeafyPoultice.cs", "note": "lose 12 max HP on obtain (MaxHpVar 12); downside pool user order 2026-09-15" },
+    { "atomId": "SereTalon#AfterObtained#0", "fix": {}, "evidence": "SereTalon.cs:33", "note": "lose 9 max HP on obtain (HpLossVar 9)" },
+    { "atomId": "FragrantMushroom#AfterObtained#0", "fix": { "target": "self", "variant": "unblockable" }, "evidence": "FragrantMushroom.cs:31", "note": "self-damage 15 (HpLossVar) Unblockable|Unpowered on obtain; extractor mislabeled selected_enemy" },
+    { "atomId": "PrecariousShears#AfterObtained#0", "fix": { "target": "self", "values": { "amount": 16 } }, "evidence": "PrecariousShears.cs:21,30", "note": "self-damage 16 (DamageVar 16 Unpowered, blockable) on obtain; extractor stored the cards-removed count 2" },
+    { "atomId": "RoyalPoison#AfterPlayerTurnStart#0", "fix": { "target": "self", "variant": "unblockable" }, "evidence": "RoyalPoison.cs:16-23", "note": "self-damage 4 Unblockable|Unpowered on turn 1 (TurnNumber<=1); extractor mislabeled selected_enemy" },
+    { "atomId": "CursedPearl#AfterObtained#1", "fix": {}, "evidence": "CursedPearl.cs:24", "note": "add curse Greed on obtain; downside pool user order 2026-09-15" },
+    { "atomId": "CallingBell#AfterObtained#1", "fix": {}, "evidence": "CallingBell.cs:31", "note": "add curse CurseOfTheBell on obtain" },
+    { "atomId": "BloodSoakedRose#AfterObtained#1", "fix": {}, "evidence": "BloodSoakedRose.cs:33", "note": "add curse Enthralled on obtain" },
+    { "atomId": "PreservedFog#AfterObtained#1", "fix": {}, "evidence": "PreservedFog.cs:26", "note": "add curse Folly on obtain" },
+    { "atomId": "SealOfGold#AfterSideTurnStart#1", "fix": {}, "evidence": "SealOfGold.cs:25-31", "note": "lose 3 Gold at side turn start when gold >= 3 (GoldVar 3); executor mirrors the engine gold guard" },
+    { "atomId": "SilkenTress#AfterObtained#1", "fix": {}, "evidence": "SilkenTress.cs:44", "note": "lose ALL Gold on obtain (variant all)" }
   ],
   "rejected": [
     { "atomId": "ArtOfWar#*", "reason": "needs cross-turn saved state (anyAttacksPlayedLastTurn)", "evidence": "ArtOfWar.cs:19-21" },
@@ -39,7 +51,7 @@
     { "atomId": "CentennialPuzzle#*", "reason": "once-per-combat latch lost", "evidence": "CentennialPuzzle.cs" },
     { "atomId": "CloakClasp#*", "reason": "block scales with hand count (expression), not flat 1", "evidence": "CloakClasp.cs" },
     { "atomId": "ParryingShield#*", "reason": "needs block>=10 condition + RNG single target; extractor stored damage 10 all enemies", "evidence": "ParryingShield.cs" },
-    { "atomId": "CursedPearl#*", "reason": "obtain downside (curse) dropped by extractor; effect-only relic would be strictly better than source", "evidence": "CursedPearl.cs" },
+    { "atomId": "CursedPearl#AfterObtained#0", "reason": "gain 333 Gold without its curse pairing; the curse half is now supported separately as #1 (downside pool 2026-09-15)", "evidence": "CursedPearl.cs" },
     { "atomId": "AlchemicalCoffer#*", "reason": "compound obtain effect, unverified decomposition", "evidence": "AlchemicalCoffer.cs" },
     { "atomId": "DemonTongue#*", "reason": "empty values", "evidence": "DemonTongue.cs" },
     { "atomId": "ReptileTrinket#*", "reason": "empty values on named power", "evidence": "ReptileTrinket.cs" },
@@ -54,7 +66,7 @@
     { "atomId": "GoldenPearl#*", "reason": "Ancient rarity; ancients stay vanilla", "evidence": "GoldenPearl.cs" },
     { "atomId": "BurningBlood#*", "reason": "starter relic (never drops) + heal value confused with BlackBlood", "evidence": "BurningBlood.cs" },
     { "atomId": "BlackBlood#*", "reason": "starter relic (never drops) + heal value confused with BurningBlood", "evidence": "BlackBlood.cs" },
-    { "atomId": "FragrantMushroom#*", "reason": "obtain-time effect mislabeled selected_enemy; often no enemies exist on obtain", "evidence": "FragrantMushroom.cs" },
-    { "atomId": "Brimstone#*", "reason": "two named PowerVar calls with per-call arguments unresolved", "evidence": "Brimstone.cs" }
+    { "atomId": "Brimstone#*", "reason": "two named PowerVar calls with per-call arguments unresolved", "evidence": "Brimstone.cs" },
+    { "atomId": "SealOfGold#AfterSideTurnStart#0", "reason": "extractor swapped the vars: stored gain_energy 3, engine is +1 Energy with LoseGold 3 (downside supported as #1)", "evidence": "SealOfGold.cs:22-31" }
   ]
 }

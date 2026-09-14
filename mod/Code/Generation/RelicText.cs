@@ -77,6 +77,15 @@ public static class RelicText
             ("gain_gold", _, "self") => $"gain {amount} Gold.",
             ("gain_max_potion", _, "self") => $"gain {amount} potion slot{(amount == 1 ? "" : "s")}.",
             ("deal_damage", _, "all_enemies") => $"deal {amount} damage to ALL enemies.",
+            // Downside pool (user order 2026-09-15). lose_hp "unblockable" is
+            // true HP loss (engine Unblockable|Unpowered, e.g. RoyalPoison);
+            // plain lose_hp is blockable self-damage (e.g. PrecariousShears).
+            ("lose_hp", "unblockable", "self") => $"lose {amount} HP.",
+            ("lose_hp", _, "self") => $"take {amount} damage.",
+            ("lose_max_hp", _, "self") => $"lose {amount} Max HP.",
+            ("lose_gold", "all", "self") => "lose all your Gold.",
+            ("lose_gold", _, "self") => $"lose {amount} Gold.",
+            ("add_curse", _, _) => "add 1 Curse to your deck.",
             ("modify_hand_draw", _, "self") when amount >= 0 =>
                 $"draw {amount} additional card{(amount == 1 ? "" : "s")} on turn 1 of each combat.",
             ("modify_hand_draw", _, "self") =>
@@ -102,6 +111,12 @@ public static class RelicText
             ("gain_gold", _, "self") => $"获得{amount}金币。",
             ("gain_max_potion", _, "self") => $"获得{amount}个药水栏位。",
             ("deal_damage", _, "all_enemies") => $"对所有敌人造成{amount}点伤害。",
+            ("lose_hp", "unblockable", "self") => $"失去{amount}点生命。",
+            ("lose_hp", _, "self") => $"受到{amount}点伤害。",
+            ("lose_max_hp", _, "self") => $"失去{amount}点生命上限。",
+            ("lose_gold", "all", "self") => "失去所有金币。",
+            ("lose_gold", _, "self") => $"失去{amount}金币。",
+            ("add_curse", _, _) => "将1张诅咒牌加入你的牌堆。",
             ("modify_hand_draw", _, "self") when amount >= 0 => $"每场战斗第1回合额外抽{amount}张牌。",
             ("modify_hand_draw", _, "self") => $"每场战斗第1回合少抽{-amount}张牌。",
             _ => throw new InvalidOperationException($"no ZHS text for effect {effect.Opcode}/{effect.Variant}/{effect.Target}"),
