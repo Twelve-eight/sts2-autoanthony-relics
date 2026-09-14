@@ -661,3 +661,11 @@ P1 AAR-R4-01: 新 CombatScopedOpcodes guard 没有修生成上下文. 20 个固�
 代码: SpecOpcode+LoseGold/AddCurse; EffectFragment.IsDownside (opcode 判定); RelicGenerator SeedVersion→relics-v2 + 整数加权采样 (下行 140 vs 普通 100, PickWeightedUniquely); RelicText EN/ZHS 新用例 (诅咒文本通用化 "add 1 Curse to your deck"/"将1张诅咒牌加入你的牌堆", 具体诅咒由牌自身本地化); AnthonyRelicModel 执行器 5 新 case + CurseTypes 反射泛型 AddCurseToDeck<T> + HasUponPickupEffect 动态覆写 (引擎契约: 带拾取效果=不可交易). 设计硬约束: 加权系数是常量不是配置项 — 生成定义不得受配置影响 (seed 纯函数契约).
 
 验证: Release 0 警告 0 错误; relic-probe 37 PASS + PROBE OK (含新鲜度守卫; 新增 11 碎片组成断言 + 1.4 权重行为断言: 100 seeds 触发型抽取下行份额在 uniform×[1.15,1.65] 区间). 部署哈希与构建一致. 未实机验证: 真实拾取下行遗物 (诅咒入牌堆/失上限/失金币/自伤), 用户冒烟; 工坊推送待用户 2FA.
+
+### v0.1.6 追加: 描述标点结构化重组 (用户报告语病)
+
+问题: 碎片文本自带句号, 机械拼接产生 "gain 14 Block. gain 1 Strength." —— 并列同时触发的效果被句号切成两个不相关的句子; 纯被动遗物还以小写动词开头.
+
+修复 (只动渲染层, 生成逻辑与 SeedVersion 不变, 同种子同遗物): RelicText.EffectEn/EffectZhs 全部 40 个用例改为列表项形式 (无尾部句号); GeneratedRelicDefinition.DescriptionEn/Zhs 按真逻辑重组 —— EN 单效果直拼、双效果 "A and B"、三个以上 "A, B and C", 首字母大写 (被动开头), 全句唯一句号; ZHS 以顿号","并列并以"。"收尾. 描述仍由 AnthonyRelicLocUpdater 在运行期刷新, 无需重开进程.
+
+验证: 构建 0/0; 探针 38 项 PASS + PROBE OK, 新增标点断言 (50 seeds x 60 slots: 句中不得出现句中句号, >=2 效果必须含 " and " 或 ","); 样例确认 "Draw 2 additional cards on turn 1 of each combat." 大写开头. 部署哈希 a33d2723 与构建一致.

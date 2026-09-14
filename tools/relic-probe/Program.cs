@@ -278,6 +278,33 @@ internal static class Program
             "downside share ~= 1.4x uniform (weighted 140 vs 100)",
             $"observed {observedShare:F3} vs uniform {uniformShare:F3} over {triggeredPicks} picks");
 
+        // ---- 10. Description punctuation (user report 2026-09-15): fragments
+        // carry no sentence punctuation; a description is ONE sentence -
+        // concurrent effects joined with "and"/commas (EN) or enumeration
+        // commas (ZHS), and exactly one final period.
+        bool punctOk = true;
+        for (int i = 0; i < 50; i++)
+        {
+            foreach (var d in RelicGenerator.Generate($"punct-{i}", pool))
+            {
+                string en = d.DescriptionEn;
+                string zh = d.DescriptionZhs;
+                if (en.EndsWith(".")) { en = en[..^1]; }
+                if (zh.EndsWith("。")) { zh = zh[..^1]; }
+                if (en.Contains(". ") || en.Contains(",.") || zh.Contains("。"))
+                {
+                    punctOk = false;
+                    Console.WriteLine($"  mid-sentence punctuation: {d.NameEn}: {d.DescriptionEn}");
+                }
+                if (d.Effects.Count >= 2 && !en.Contains(" and ") && !zh.Contains("，"))
+                {
+                    punctOk = false;
+                    Console.WriteLine($"  missing conjunction: {d.NameEn}: {d.DescriptionEn}");
+                }
+            }
+        }
+        Check(punctOk, "descriptions are single re-punctuated sentences");
+
         Console.WriteLine();
         Console.WriteLine(_failures == 0 ? "PROBE OK" : $"PROBE FAILED: {_failures} check(s)");
         return _failures == 0 ? 0 : 1;

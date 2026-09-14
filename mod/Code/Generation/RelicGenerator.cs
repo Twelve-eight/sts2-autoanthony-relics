@@ -36,15 +36,13 @@ public sealed record GeneratedRelicDefinition(
             {
                 sb.Append(RelicText.TriggerEn(Trigger));
             }
-            for (int i = 0; i < Effects.Count; i++)
-            {
-                if (i > 0)
-                {
-                    sb.Append(' ');
-                }
-                sb.Append(RelicText.EffectEn(Effects[i]));
-            }
-            return sb.ToString();
+            // The effects of one relic are CONCURRENT list items of a single
+            // sentence: fragments no longer carry their own sentence period,
+            // the join adds comma/"and" per list position and one final
+            // period (user report 2026-09-15: "gain 14 Block. gain 1
+            // Strength." read as two unrelated sentences).
+            sb.Append(JoinEn(Effects));
+            return SentenceCase(sb.ToString());
         }
     }
 
@@ -57,12 +55,54 @@ public sealed record GeneratedRelicDefinition(
             {
                 sb.Append(RelicText.TriggerZhs(Trigger));
             }
-            for (int i = 0; i < Effects.Count; i++)
-            {
-                sb.Append(RelicText.EffectZhs(Effects[i]));
-            }
+            sb.Append(JoinZhs(Effects));
             return sb.ToString();
         }
+    }
+
+    private static string JoinEn(IReadOnlyList<EffectFragment> effects)
+    {
+        switch (effects.Count)
+        {
+            case 0: return "";
+            case 1: return RelicText.EffectEn(effects[0]);
+            case 2: return RelicText.EffectEn(effects[0]) + " and " + RelicText.EffectEn(effects[1]);
+            default:
+                var parts = new List<string>(effects.Count);
+                foreach (EffectFragment effect in effects)
+                {
+                    parts.Add(RelicText.EffectEn(effect));
+                }
+                return string.Join(", ", parts.GetRange(0, parts.Count - 1)) + " and " + parts[^1];
+        }
+    }
+
+    private static string JoinZhs(IReadOnlyList<EffectFragment> effects)
+    {
+        var parts = new List<string>(effects.Count);
+        foreach (EffectFragment effect in effects)
+        {
+            parts.Add(RelicText.EffectZhs(effect));
+        }
+        if (parts.Count == 0)
+        {
+            return "";
+        }
+        string body = string.Join("，", parts);
+        return body + "。";
+    }
+
+    /// <summary>Capitalize the first letter (passive-only relics start with a lowercase verb) and end with one period.</summary>
+    private static string SentenceCase(string text)
+    {
+        var trimmed = text.TrimEnd();
+        if (trimmed.Length == 0)
+        {
+            return trimmed;
+        }
+        var chars = trimmed.ToCharArray();
+        chars[0] = char.ToUpperInvariant(chars[0]);
+        return new string(chars) + ".";
     }
 
     /// <summary>Identity of the generated content, for run-internal dedup and probe assertions.</summary>

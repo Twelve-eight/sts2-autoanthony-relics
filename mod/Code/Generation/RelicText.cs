@@ -62,63 +62,69 @@ public static class RelicText
 
     public static string EffectEn(EffectFragment effect)
     {
+        // List-item form: NO trailing period. Descriptions are single
+        // sentences; GeneratedRelicDefinition joins concurrent effects with
+        // punctuation and conjunctions derived from the real structure and
+        // adds the final period. Keeping raw sentence punctuation here
+        // produced "gain 14 Block. gain 1 Strength." (user report 2026-09-15).
         int amount = effect.Amount;
         return (effect.Opcode, effect.Variant, effect.Target) switch
         {
-            ("apply_power", "vigor", "self") => $"gain {amount} Vigor.",
-            ("apply_power", "strength", "self") => $"gain {amount} Strength.",
-            ("apply_power", "thorns", "self") => $"gain {amount} Thorns.",
-            ("apply_power", "vulnerable", "all_enemies") => $"apply {amount} Vulnerable to ALL enemies.",
-            ("gain_block", _, "self") => $"gain {amount} Block.",
-            ("heal", _, "self") => $"heal {amount} HP.",
-            ("gain_energy", _, "self") => $"gain {amount} Energy.",
-            ("draw_cards", _, "self") => $"draw {amount} card{(amount == 1 ? "" : "s")}.",
-            ("gain_max_hp", _, "self") => $"gain {amount} Max HP.",
-            ("gain_gold", _, "self") => $"gain {amount} Gold.",
-            ("gain_max_potion", _, "self") => $"gain {amount} potion slot{(amount == 1 ? "" : "s")}.",
-            ("deal_damage", _, "all_enemies") => $"deal {amount} damage to ALL enemies.",
+            ("apply_power", "vigor", "self") => $"gain {amount} Vigor",
+            ("apply_power", "strength", "self") => $"gain {amount} Strength",
+            ("apply_power", "thorns", "self") => $"gain {amount} Thorns",
+            ("apply_power", "vulnerable", "all_enemies") => $"apply {amount} Vulnerable to ALL enemies",
+            ("gain_block", _, "self") => $"gain {amount} Block",
+            ("heal", _, "self") => $"heal {amount} HP",
+            ("gain_energy", _, "self") => $"gain {amount} Energy",
+            ("draw_cards", _, "self") => $"draw {amount} card{(amount == 1 ? "" : "s")}",
+            ("gain_max_hp", _, "self") => $"gain {amount} Max HP",
+            ("gain_gold", _, "self") => $"gain {amount} Gold",
+            ("gain_max_potion", _, "self") => $"gain {amount} potion slot{(amount == 1 ? "" : "s")}",
+            ("deal_damage", _, "all_enemies") => $"deal {amount} damage to ALL enemies",
             // Downside pool (user order 2026-09-15). lose_hp "unblockable" is
             // true HP loss (engine Unblockable|Unpowered, e.g. RoyalPoison);
             // plain lose_hp is blockable self-damage (e.g. PrecariousShears).
-            ("lose_hp", "unblockable", "self") => $"lose {amount} HP.",
-            ("lose_hp", _, "self") => $"take {amount} damage.",
-            ("lose_max_hp", _, "self") => $"lose {amount} Max HP.",
-            ("lose_gold", "all", "self") => "lose all your Gold.",
-            ("lose_gold", _, "self") => $"lose {amount} Gold.",
-            ("add_curse", _, _) => "add 1 Curse to your deck.",
+            ("lose_hp", "unblockable", "self") => $"lose {amount} HP",
+            ("lose_hp", _, "self") => $"take {amount} damage",
+            ("lose_max_hp", _, "self") => $"lose {amount} Max HP",
+            ("lose_gold", "all", "self") => "lose all your Gold",
+            ("lose_gold", _, "self") => $"lose {amount} Gold",
+            ("add_curse", _, _) => "add 1 Curse to your deck",
             ("modify_hand_draw", _, "self") when amount >= 0 =>
-                $"draw {amount} additional card{(amount == 1 ? "" : "s")} on turn 1 of each combat.",
+                $"draw {amount} additional card{(amount == 1 ? "" : "s")} on turn 1 of each combat",
             ("modify_hand_draw", _, "self") =>
-                $"draw {-amount} fewer card{(amount == -1 ? "" : "s")} on turn 1 of each combat.",
+                $"draw {-amount} fewer card{(amount == -1 ? "" : "s")} on turn 1 of each combat",
             _ => throw new InvalidOperationException($"no EN text for effect {effect.Opcode}/{effect.Variant}/{effect.Target}"),
         };
     }
 
     public static string EffectZhs(EffectFragment effect)
     {
+        // List-item form: NO trailing 。 (see EffectEn).
         int amount = effect.Amount;
         return (effect.Opcode, effect.Variant, effect.Target) switch
         {
-            ("apply_power", "vigor", "self") => $"获得{amount}点活力。",
-            ("apply_power", "strength", "self") => $"获得{amount}点力量。",
-            ("apply_power", "thorns", "self") => $"获得{amount}点荆棘。",
-            ("apply_power", "vulnerable", "all_enemies") => $"给予所有敌人{amount}层易伤。",
-            ("gain_block", _, "self") => $"获得{amount}点格挡。",
-            ("heal", _, "self") => $"回复{amount}点生命。",
-            ("gain_energy", _, "self") => $"获得{amount}点能量。",
-            ("draw_cards", _, "self") => $"抽{amount}张牌。",
-            ("gain_max_hp", _, "self") => $"提升{amount}点生命上限。",
-            ("gain_gold", _, "self") => $"获得{amount}金币。",
-            ("gain_max_potion", _, "self") => $"获得{amount}个药水栏位。",
-            ("deal_damage", _, "all_enemies") => $"对所有敌人造成{amount}点伤害。",
-            ("lose_hp", "unblockable", "self") => $"失去{amount}点生命。",
-            ("lose_hp", _, "self") => $"受到{amount}点伤害。",
-            ("lose_max_hp", _, "self") => $"失去{amount}点生命上限。",
-            ("lose_gold", "all", "self") => "失去所有金币。",
-            ("lose_gold", _, "self") => $"失去{amount}金币。",
-            ("add_curse", _, _) => "将1张诅咒牌加入你的牌堆。",
-            ("modify_hand_draw", _, "self") when amount >= 0 => $"每场战斗第1回合额外抽{amount}张牌。",
-            ("modify_hand_draw", _, "self") => $"每场战斗第1回合少抽{-amount}张牌。",
+            ("apply_power", "vigor", "self") => $"获得{amount}点活力",
+            ("apply_power", "strength", "self") => $"获得{amount}点力量",
+            ("apply_power", "thorns", "self") => $"获得{amount}点荆棘",
+            ("apply_power", "vulnerable", "all_enemies") => $"给予所有敌人{amount}层易伤",
+            ("gain_block", _, "self") => $"获得{amount}点格挡",
+            ("heal", _, "self") => $"回复{amount}点生命",
+            ("gain_energy", _, "self") => $"获得{amount}点能量",
+            ("draw_cards", _, "self") => $"抽{amount}张牌",
+            ("gain_max_hp", _, "self") => $"提升{amount}点生命上限",
+            ("gain_gold", _, "self") => $"获得{amount}金币",
+            ("gain_max_potion", _, "self") => $"获得{amount}个药水栏位",
+            ("deal_damage", _, "all_enemies") => $"对所有敌人造成{amount}点伤害",
+            ("lose_hp", "unblockable", "self") => $"失去{amount}点生命",
+            ("lose_hp", _, "self") => $"受到{amount}点伤害",
+            ("lose_max_hp", _, "self") => $"失去{amount}点生命上限",
+            ("lose_gold", "all", "self") => "失去所有金币",
+            ("lose_gold", _, "self") => $"失去{amount}金币",
+            ("add_curse", _, _) => "将1张诅咒牌加入你的牌堆",
+            ("modify_hand_draw", _, "self") when amount >= 0 => $"每场战斗第1回合额外抽{amount}张牌",
+            ("modify_hand_draw", _, "self") => $"每场战斗第1回合少抽{-amount}张牌",
             _ => throw new InvalidOperationException($"no ZHS text for effect {effect.Opcode}/{effect.Variant}/{effect.Target}"),
         };
     }
