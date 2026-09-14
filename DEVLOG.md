@@ -669,3 +669,11 @@ P1 AAR-R4-01: 新 CombatScopedOpcodes guard 没有修生成上下文. 20 个固�
 修复 (只动渲染层, 生成逻辑与 SeedVersion 不变, 同种子同遗物): RelicText.EffectEn/EffectZhs 全部 40 个用例改为列表项形式 (无尾部句号); GeneratedRelicDefinition.DescriptionEn/Zhs 按真逻辑重组 —— EN 单效果直拼、双效果 "A and B"、三个以上 "A, B and C", 首字母大写 (被动开头), 全句唯一句号; ZHS 以顿号","并列并以"。"收尾. 描述仍由 AnthonyRelicLocUpdater 在运行期刷新, 无需重开进程.
 
 验证: 构建 0/0; 探针 38 项 PASS + PROBE OK, 新增标点断言 (50 seeds x 60 slots: 句中不得出现句中句号, >=2 效果必须含 " and " 或 ","); 样例确认 "Draw 2 additional cards on turn 1 of each combat." 大写开头. 部署哈希 a33d2723 与构建一致.
+
+### v0.1.6 追加2: 生命上限提升策略收紧 (用户指令, 硬规则)
+
+规则: 生成遗物只允许在"拾起时"(obtained)触发下提升生命值上限; 其余任何场景(战斗结束/获得金币/回合系/无触发被动)一律禁止. 受影响池内碎片: ChosenCheese(战斗结束+1)与 DragonFruit(获得金币+1)同形折叠的一条 gain_max_hp|amount:1 碎片 —— 数据与账本保留(忠实记录原版遗物行为), 仅生成采样排除. Mango/Strawberry/BigMushroom 的拾取系上限增益不受影响; lose_max_hp(下行)不受影响.
+
+实现: RelicGenerator.Forbidden 扩展为 Excluded(递归边界 + max-HP 策略, 含被动路径防御), eligible 过滤两处 + 被动路径接入; SeedVersion relics-v2→v3(资格规则变更, 同种子将重新生成, 存档续读走版本隔离). 探针: 新增策略断言(100 seeds 无违规 + 拾取系上限遗物仍可生成 + 池内碎片保留), soak 可达性断言改为"仅 max-HP 策略碎片允许缺席"(原全量可达断言不再成立).
+
+验证: Release 0/0; relic-probe 42 项 PASS + PROBE OK; content 已重同步(dll 43bbcedf), changenote 增补策略句, VDF 校验通过. 0.1.6 仍未推工坊, 本次与下行词条池/文本重组合并为一次发布.

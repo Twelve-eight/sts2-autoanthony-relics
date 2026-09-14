@@ -144,12 +144,12 @@ public static class RelicGenerator
     public const int SlotCount = 60;
 
     /// <summary>
-    /// v2: downside pool (user order 2026-09-15). Pool contents changed (11
-    /// downside fragments from all relic sources incl. Ancient/Event), so the
+    /// v3: max-HP generation policy (user order 2026-09-15). Eligibility
+    /// rules changed (gain_max_hp only under the obtained trigger), so the
     /// version bump keeps the run-registry cache key cleanly separated from
-    /// v1 saves' generated sets.
+    /// v2 saves' generated sets.
     /// </summary>
-    public const string SeedVersion = "relics-v2";
+    public const string SeedVersion = "relics-v3";
 
     /// <summary>Chance a slot samples a second effect (both bound to the trigger).</summary>
     private const int TwoEffectChancePercent = 30;
@@ -168,15 +168,25 @@ public static class RelicGenerator
     private const int NormalWeight = 100;
 
     /// <summary>
-    /// A gain_gold effect on a gold_gained trigger would recurse (gaining gold
-    /// grants gold). The generation-time ban is the v1 recursion boundary;
-    /// richer limiter semantics are future work and tracked in the fidelity
-    /// ledger.
+    /// Generation-policy exclusions.
+    /// 1. Recursion boundary (v1): a gain_gold effect on a gold_gained
+    ///    trigger would recurse (gaining gold grants gold); richer limiter
+    ///    semantics are future work tracked in the fidelity ledger.
+    /// 2. Max-HP policy (user order 2026-09-15): generated relics may raise
+    ///    Max HP ONLY under the "obtained" trigger (拾起时). Any other
+    ///    trigger - and trigger-less passive sampling - must never carry
+    ///    gain_max_hp, so mid-run growth (ChosenCheese combat-end /
+    ///    DragonFruit gold-gained gains) is out of policy for generated
+    ///    content. The fragments stay in the pool and ledger as data-
+    ///    fidelity records; they are merely unsampleable here.
+    ///    LoseMaxHp downsides are unaffected.
     /// </summary>
-    private static bool Forbidden(TriggerFragment? trigger, EffectFragment effect) =>
-        trigger is not null
-        && trigger.Kind == "gold_gained"
-        && effect.Opcode == "gain_gold";
+    private static bool Excluded(TriggerFragment? trigger, EffectFragment effect) =>
+        (trigger is not null
+            && trigger.Kind == "gold_gained"
+            && effect.Opcode == "gain_gold")
+        || (effect.Opcode == "gain_max_hp"
+            && (trigger is null || trigger.Kind != "obtained"));
 
     public static IReadOnlyList<GeneratedRelicDefinition> Generate(string runSeed, RelicFragmentPool pool)
     {
@@ -209,7 +219,7 @@ public static class RelicGenerator
             if (pool.PassiveEffects.Count > 0 && random.Next(100) < PassiveRelicChancePercent)
             {
                 EffectFragment passive = PickUniquely(random, pool.PassiveEffects,
-                    e => usedPassives.Add(e.ShapeKey), e => !usedPassives.Contains(e.ShapeKey))
+                    e => usedPassives.Add(e.ShapeKey), e => !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e))
                     ?? pool.PassiveEffects[random.Next(pool.PassiveEffects.Count)];
                 usedPassives.Add(passive.ShapeKey);
                 effects.Add(passive);
@@ -223,7 +233,7 @@ public static class RelicGenerator
                 {
                     EffectFragment? picked = PickWeightedUniquely(random, pool.TriggeredEffects,
                         e => effects.Exists(x => x.ShapeKey == e.ShapeKey),
-                        e => !Forbidden(trigger, e) && effects.All(x => x.ShapeKey != e.ShapeKey),
+                        e => !Excluded(trigger, e) && effects.All(x => x.ShapeKey != e.ShapeKey),
                         WeightOf);
                     if (picked is null)
                     {
@@ -265,7 +275,7 @@ public static class RelicGenerator
                     {
                         EffectFragment? picked = PickWeightedUniquely(random, pool.TriggeredEffects,
                             e => effects.Exists(x => x.ShapeKey == e.ShapeKey),
-                            e => !Forbidden(trigger, e) && effects.All(x => x.ShapeKey != e.ShapeKey),
+                            e => !Excluded(trigger, e) && effects.All(x => x.ShapeKey != e.ShapeKey),
                             WeightOf);
                         if (picked is null)
                         {

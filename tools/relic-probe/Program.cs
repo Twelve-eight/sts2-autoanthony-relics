@@ -247,9 +247,14 @@ internal static class Program
         Check(soakShape, "soak: 200 seeds, every slot well-formed");
         Check(usageTriggers.Count == pool.Triggers.Count, "soak: every trigger fragment reachable",
             $"{usageTriggers.Count}/{pool.Triggers.Count}");
-        Check(usageEffects.Count == pool.TriggeredEffects.Count + pool.PassiveEffects.Count,
-            "soak: every effect fragment reachable",
-            $"{usageEffects.Count}/{pool.TriggeredEffects.Count + pool.PassiveEffects.Count}");
+        // Max-HP policy (user order 2026-09-15): the +1 max-HP fragment shared
+        // by ChosenCheese (combat end) / DragonFruit (gold gained) is
+        // unsampleable by design, so it is the ONLY fragment allowed missing.
+        var allEffectKeys = pool.TriggeredEffects.Concat(pool.PassiveEffects).Select(e => e.Key).ToList();
+        var missing = allEffectKeys.Where(k => !usageEffects.Contains(k)).ToList();
+        Check(missing.All(k => k.StartsWith("gain_max_hp|", StringComparison.Ordinal)),
+            "soak: only max-HP-policy fragments unreachable",
+            missing.Count == 0 ? "none missing" : string.Join(",", missing));
 
         // ---- 9. Downside weighting: downside fragments weigh 140 vs 100, so
         // their observed share among TRIGGERED effect picks must sit clearly
@@ -304,6 +309,37 @@ internal static class Program
             }
         }
         Check(punctOk, "descriptions are single re-punctuated sentences");
+
+        // ---- 11. Max-HP policy (user order 2026-09-15): generated relics may
+        // raise Max HP ONLY under the obtained trigger (拾起时). The pool keeps
+        // the mid-run fragments as data records; the generator must never
+        // sample them.
+        bool maxHpOk = true;
+        int maxHpObtainRelics = 0;
+        for (int i = 0; i < 100; i++)
+        {
+            foreach (var d in RelicGenerator.Generate($"maxhp-{i}", pool))
+            foreach (var e in d.Effects)
+            {
+                if (e.Opcode != "gain_max_hp")
+                {
+                    continue;
+                }
+                if (d.Trigger is null || d.Trigger.Kind != "obtained")
+                {
+                    maxHpOk = false;
+                    Console.WriteLine($"  max-HP policy violation: slot {d.Slot} trigger {d.Trigger?.Kind ?? "(passive)"}: {d.DescriptionEn}");
+                }
+                else
+                {
+                    maxHpObtainRelics++;
+                }
+            }
+        }
+        Check(maxHpOk, "gain_max_hp generated only under obtained trigger");
+        Check(maxHpObtainRelics > 0, "obtained max-HP relics still generatable", $"{maxHpObtainRelics}");
+        Check(pool.TriggeredEffects.Any(e => e.Opcode == "gain_max_hp"),
+            "max-HP fragments retained in pool (policy excludes sampling, not data)");
 
         Console.WriteLine();
         Console.WriteLine(_failures == 0 ? "PROBE OK" : $"PROBE FAILED: {_failures} check(s)");
