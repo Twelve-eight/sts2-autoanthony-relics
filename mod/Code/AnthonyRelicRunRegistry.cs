@@ -28,11 +28,40 @@ public static class AnthonyRelicRunRegistry
     private static readonly Dictionary<(string Seed, string Version, string Fingerprint), IReadOnlyList<GeneratedRelicDefinition>> Cache = new();
     private static readonly Queue<(string Seed, string Version, string Fingerprint)> Order = new();
 
+    // Frozen active context (AAR-1): the overwhelmingly common access pattern is many lookups
+    // in a row for the SAME (seed, version, fingerprint) - a render pass resolves every relic
+    // slot against one pool. Comparing three strings costs ~6 ns and allocates nothing, versus
+    // ~38.5 ns for the dictionary lookup alone (slice measurement), so a frozen context wins.
+    //
+    // THREADING: this field is read WITHOUT the lock, so it is published as ONE immutable
+    // snapshot object - a single atomic reference write. Publishing the four values separately
+    // would let a reader observe a new seed paired with a previous result (torn read), i.e.
+    // return another run's relics. `volatile` keeps the write from being reordered with the
+    // state it describes.
+    private sealed record FrozenContext(
+        string Seed,
+        string Version,
+        string Fingerprint,
+        IReadOnlyList<GeneratedRelicDefinition> Result);
+
+    private static volatile FrozenContext? _frozen;
+
     /// <summary>Seed of the active run, captured by the seed-tracking patches.</summary>
     public static string? CurrentRunSeed { get; set; }
 
     public static IReadOnlyList<GeneratedRelicDefinition> DefinitionsFor(string runSeed, RelicFragmentPool pool)
     {
+        // Fast path: same context as the last resolved lookup. Value equality (not reference
+        // equality) so a distinct string instance with the same text still hits.
+        FrozenContext? frozen = _frozen;
+        if (frozen != null
+            && frozen.Seed == runSeed
+            && frozen.Version == RelicGenerator.SeedVersion
+            && frozen.Fingerprint == pool.Fingerprint)
+        {
+            return frozen.Result;
+        }
+
         lock (Gate)
         {
             // Key = seed + ALGORITHM VERSION + fragment-pool fingerprint (second-round review
@@ -42,15 +71,26 @@ public static class AnthonyRelicRunRegistry
             (string Seed, string Version, string Fingerprint) key = (runSeed, RelicGenerator.SeedVersion, pool.Fingerprint);
             if (Cache.TryGetValue(key, out IReadOnlyList<GeneratedRelicDefinition>? cached))
             {
+                _frozen = new FrozenContext(key.Seed, key.Version, key.Fingerprint, cached);
                 return cached;
             }
             IReadOnlyList<GeneratedRelicDefinition> generated = RelicGenerator.Generate(runSeed, pool);
             while (Order.Count >= CacheLimit)
             {
-                Cache.Remove(Order.Dequeue());
+                (string Seed, string Version, string Fingerprint) evicted = Order.Dequeue();
+                Cache.Remove(evicted);
+                // Keep the frozen context consistent with the cache: if the evicted entry is the
+                // frozen one, clear it so the fast path cannot serve an un-cached result.
+                FrozenContext? current = _frozen;
+                if (current != null && current.Seed == evicted.Seed && current.Version == evicted.Version
+                    && current.Fingerprint == evicted.Fingerprint)
+                {
+                    _frozen = null;
+                }
             }
             Order.Enqueue(key);
             Cache[key] = generated;
+            _frozen = new FrozenContext(key.Seed, key.Version, key.Fingerprint, generated);
             return generated;
         }
     }
@@ -69,6 +109,9 @@ public static class AnthonyRelicRunRegistry
         {
             Cache.Clear();
             Order.Clear();
+            // The frozen fast-path context must be dropped with the cache, or a menu query
+            // after a run would still be served the previous run's definitions.
+            _frozen = null;
         }
     }
 
