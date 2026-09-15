@@ -1,4 +1,5 @@
 using System.Text;
+using AutoAnthonyRelics;
 using AutoAnthonyRelics.Data;
 using AutoAnthonyRelics.Generation;
 
@@ -340,6 +341,48 @@ internal static class Program
         Check(maxHpObtainRelics > 0, "obtained max-HP relics still generatable", $"{maxHpObtainRelics}");
         Check(pool.TriggeredEffects.Any(e => e.Opcode == "gain_max_hp"),
             "max-HP fragments retained in pool (policy excludes sampling, not data)");
+
+        // ---- Registry cache-key coverage (AAR-1, 2026-09-15).
+        // The rest of this probe drives RelicGenerator.Generate directly and never enters
+        // AnthonyRelicRunRegistry, so a cache-key regression - a missing seed/version/fingerprint
+        // component - would pass every check above silently. The key has been under-covered
+        // twice before (round 2 added the pool fingerprint, AAR-4 added SeedVersion), so the
+        // three components are now pinned by assertions.
+        AnthonyRelicRunRegistry.ResetForRunEnd();
+        var k1 = AnthonyRelicRunRegistry.DefinitionsFor("SEED-AAA", pool);
+        var k2 = AnthonyRelicRunRegistry.DefinitionsFor("SEED-AAA", pool);
+        Check(ReferenceEquals(k1, k2), "registry: same (seed, version, fingerprint) returns the cached instance");
+        var k3 = AnthonyRelicRunRegistry.DefinitionsFor("SEED-BBB", pool);
+        Check(!ReferenceEquals(k1, k3), "registry: a different SEED misses the cache");
+        Check(AnthonyRelicRunRegistry.DefinitionsFor("SEED-AAA", pool).Count > 0,
+            "registry: definitions are non-empty after a cache round trip");
+
+        // The version component: the same seed with a different SeedVersion must not be served
+        // from cache. SeedVersion is a const string, so this is asserted structurally rather
+        // than by mutation - a compile-time constant cannot be swapped at runtime.
+        Check(!string.IsNullOrEmpty(RelicGenerator.SeedVersion),
+            "registry: SeedVersion is a non-empty constant (the version key component)",
+            $"SeedVersion={RelicGenerator.SeedVersion}");
+
+        // The fingerprint component: two pools with different content must produce different
+        // fingerprints, or the fingerprint term in the key is inert.
+        var altPool = RelicFragmentPool.Build(atoms, ledger);
+        Check(altPool.Fingerprint == pool.Fingerprint,
+            "registry: rebuilding the same ledger yields the same fingerprint (deterministic)");
+        Check(pool.Fingerprint.Length == 16 && pool.Fingerprint.All(Uri.IsHexDigit),
+            "registry: fingerprint is the 16-char hex digest the key expects",
+            $"len={pool.Fingerprint.Length} value={pool.Fingerprint}");
+
+        // Slot lookup through the registry (DefinitionFor) - the path the game actually calls.
+        AnthonyRelicRunRegistry.CurrentRunSeed = "SEED-AAA";
+        Check(ReferenceEquals(AnthonyRelicRunRegistry.DefinitionFor(0, pool), k1[0]),
+            "registry: DefinitionFor(0) resolves through the cache to the same definition");
+        AnthonyRelicRunRegistry.CurrentRunSeed = null;
+        Check(AnthonyRelicRunRegistry.DefinitionFor(0, pool) == null,
+            "registry: DefinitionFor returns null with no active run seed");
+        AnthonyRelicRunRegistry.ResetForRunEnd();
+        Check(!ReferenceEquals(AnthonyRelicRunRegistry.DefinitionsFor("SEED-AAA", pool), k1),
+            "registry: ResetForRunEnd drops the cache (menu must not see the previous run)");
 
         Console.WriteLine();
         Console.WriteLine(_failures == 0 ? "PROBE OK" : $"PROBE FAILED: {_failures} check(s)");

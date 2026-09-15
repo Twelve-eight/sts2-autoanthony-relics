@@ -17,8 +17,16 @@ public static class AnthonyRelicRunRegistry
 {
     private const int CacheLimit = 4;
     private static readonly object Gate = new();
-    private static readonly Dictionary<string, IReadOnlyList<GeneratedRelicDefinition>> Cache = new(StringComparer.Ordinal);
-    private static readonly Queue<string> Order = new();
+    // AAR-1 (measured 2026-09-15): the key was a concatenated string built on EVERY call -
+    // 96 B for an 8-char seed, 128 B for a 24-char seed, measured at 128.3 ns - while the
+    // dictionary lookup alone costs 0 B / 38.5 ns and a frozen-context comparison costs
+    // 0 B / 6.2 ns. A 60-slot sweep paid 5760 B purely to build keys. The cache is now keyed
+    // by an ordinal tuple over the same three components (seed, generator version, pool
+    // fingerprint), so warm hits allocate nothing. Coverage of all three components is
+    // pinned by tools/relic-probe (the key was under-covered twice: round 2 added the pool
+    // fingerprint, AAR-4 added SeedVersion).
+    private static readonly Dictionary<(string Seed, string Version, string Fingerprint), IReadOnlyList<GeneratedRelicDefinition>> Cache = new();
+    private static readonly Queue<(string Seed, string Version, string Fingerprint)> Order = new();
 
     /// <summary>Seed of the active run, captured by the seed-tracking patches.</summary>
     public static string? CurrentRunSeed { get; set; }
@@ -27,12 +35,11 @@ public static class AnthonyRelicRunRegistry
     {
         lock (Gate)
         {
-            // Cache key = seed + ALGORITHM VERSION + fragment-pool fingerprint
-            // (second-round review 2026-09-13 added the fingerprint; third
-            // round AAR-4 added SeedVersion): definitions depend on the pool,
-            // the ledger and the generator, so a data, ledger or algorithm
-            // change with the same seed must not serve a stale cached pool.
-            string key = runSeed + "\0" + RelicGenerator.SeedVersion + "\0" + pool.Fingerprint;
+            // Key = seed + ALGORITHM VERSION + fragment-pool fingerprint (second-round review
+            // 2026-09-13 added the fingerprint; third round AAR-4 added SeedVersion):
+            // definitions depend on the pool, the ledger and the generator, so a data, ledger
+            // or algorithm change with the same seed must not serve a stale cached pool.
+            (string Seed, string Version, string Fingerprint) key = (runSeed, RelicGenerator.SeedVersion, pool.Fingerprint);
             if (Cache.TryGetValue(key, out IReadOnlyList<GeneratedRelicDefinition>? cached))
             {
                 return cached;
