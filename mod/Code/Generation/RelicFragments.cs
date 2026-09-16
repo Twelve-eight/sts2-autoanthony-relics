@@ -46,6 +46,25 @@ public sealed record EffectFragment(
 
     public bool IsDownside => DownsideOpcodes.Contains(Opcode);
 
+    /// <summary>
+    /// Opcodes whose engine command needs a live combat context (energy /
+    /// block / draw pile / enemies) and NREs without one: the executor skips
+    /// them, with a log line, when the owner has no PlayerCombatState
+    /// (AnthonyRelicModel). The generator must never promise one of these in a
+    /// context that cannot supply it (RelicGenerator.Excluded), so the set
+    /// lives here - on the fragment shape both sides already agree on -
+    /// instead of being owned by either side alone.
+    ///
+    /// Downside opcodes are NOT in this set on purpose: the engine itself fires
+    /// obtain-time self-damage / LoseMaxHp / LoseGold / AddCurseToDeck outside
+    /// combat (FragrantMushroom, PrecariousShears, LeafyPoultice, SilkenTress,
+    /// CursedPearl), and lose_hp's only triggers are obtained/turn_start.
+    /// </summary>
+    public static readonly HashSet<string> CombatScopedOpcodes = new(StringComparer.Ordinal)
+    {
+        "apply_power", "gain_block", "gain_energy", "draw_cards", "deal_damage",
+    };
+
     public int Amount => ValueOf("amount", 0);
 
     public int ValueOf(string id, int fallback = 0)

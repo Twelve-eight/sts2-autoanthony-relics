@@ -148,8 +148,15 @@ public static class RelicGenerator
     /// rules changed (gain_max_hp only under the obtained trigger), so the
     /// version bump keeps the run-registry cache key cleanly separated from
     /// v2 saves' generated sets.
+    /// v4: execution-context eligibility (WS-0916-05): combat-scoped opcodes
+    /// are no longer paired with triggers that can fire without a combat
+    /// context, all_enemies effects no longer with triggers that fire after
+    /// the last enemy is dead, and passive relics only carry the opcode the
+    /// passive hooks execute. Same reason as v2->v3: the eligibility rules
+    /// changed, so existing saves must regenerate rather than be served
+    /// relics the executor silently skips.
     /// </summary>
-    public const string SeedVersion = "relics-v3";
+    public const string SeedVersion = "relics-v4";
 
     /// <summary>Chance a slot samples a second effect (both bound to the trigger).</summary>
     private const int TwoEffectChancePercent = 30;
@@ -168,7 +175,70 @@ public static class RelicGenerator
     private const int NormalWeight = 100;
 
     /// <summary>
-    /// Generation-policy exclusions.
+    /// Triggers that can fire while the owner has no combat context at all
+    /// (<c>Player.PlayerCombatState is null</c>, i.e. no combat has started
+    /// yet this run).
+    ///
+    /// PROOF (engine decompile, sts2.decompiled.cs): PlayerCombatState is
+    /// assigned in exactly one place in the whole assembly -
+    /// <c>Player.ResetCombatState()</c> -> <c>PlayerCombatState = new
+    /// PlayerCombatState(this)</c> - and is never assigned null again, so the
+    /// property is null exactly before the run's first combat setup. Of the
+    /// trigger kinds in the pool, only these two can fire in that window:
+    /// <c>obtained</c> (RelicCmd.Obtain, before any combat) and
+    /// <c>gold_gained</c> (Hook.AfterGoldGained from PlayerCmd.GainGold, which
+    /// the engine calls out of combat for reward gold and for events like
+    /// ColossalFlower / SunkenTreasury). <c>room_entered</c> is gated to
+    /// CombatRoom by the executor, and CombatRoom.StartCombat calls SetUpCombat
+    /// (-> ResetCombatState) before Hook.AfterRoomEntered, so it always has a
+    /// combat context. Every other trigger in the pool is dispatched from the
+    /// combat turn loop or from combat creature events.
+    /// </summary>
+    private static readonly HashSet<string> TriggersWithoutCombatContext = new(StringComparer.Ordinal)
+    {
+        "obtained", "gold_gained",
+    };
+
+    /// <summary>
+    /// Triggers that fire only after every enemy of the combat is already dead,
+    /// so an effect that resolves against live enemies cannot do anything.
+    ///
+    /// PROOF (engine decompile): <c>combat_end</c> is Hook.AfterCombatEnd and
+    /// <c>combat_victory</c> is Hook.AfterCombatVictory, and both are called
+    /// only from CombatManager.EndCombatInternal, which is reached only through
+    /// IsCombatEnding - a predicate that returns true only when no primary
+    /// enemy is alive. The last primary enemy's death also cascades into every
+    /// remaining (secondary) enemy (CreatureCmd.KillWithoutCheckingWinCondition
+    /// kills the surviving teammates when they are all secondary), so no enemy
+    /// is left alive. The executor resolves <c>all_enemies</c> effects against
+    /// <c>Creature.CombatState.HittableEnemies</c>, which is
+    /// <c>Enemies.Where(e =&gt; e.IsHittable)</c> and IsHittable is false for a
+    /// dead creature - i.e. the empty list. A relic reading "at the end of each
+    /// combat, deal 20 damage to ALL enemies" is therefore dead text, which is
+    /// the same defect as the out-of-combat skip below.
+    /// </summary>
+    private static readonly HashSet<string> TriggersAfterEnemiesAreDead = new(StringComparer.Ordinal)
+    {
+        "combat_end", "combat_victory",
+    };
+
+    /// <summary>The fragment target that resolves against live enemies.</summary>
+    private const string EnemyTarget = "all_enemies";
+
+    /// <summary>
+    /// The only opcode a passive (trigger-less) relic can carry: the executor's
+    /// passive hook is ModifyHandDraw, which skips every effect whose opcode is
+    /// not this one. A passive fragment with any other opcode would be a relic
+    /// whose text promises an effect nothing ever runs.
+    /// </summary>
+    private const string PassiveOpcode = "modify_hand_draw";
+
+    /// <summary>
+    /// Generation-policy exclusions. A relic must never promise an effect the
+    /// executor cannot run in the context the paired trigger provides, so this
+    /// predicate is the generation-time half of the executor's own guards and
+    /// is applied at EVERY sampling site (triggered draws, both dedup-retry
+    /// draws and the passive path).
     /// 1. Recursion boundary (v1): a gain_gold effect on a gold_gained
     ///    trigger would recurse (gaining gold grants gold); richer limiter
     ///    semantics are future work tracked in the fidelity ledger.
@@ -180,13 +250,29 @@ public static class RelicGenerator
     ///    content. The fragments stay in the pool and ledger as data-
     ///    fidelity records; they are merely unsampleable here.
     ///    LoseMaxHp downsides are unaffected.
+    /// 3. Passive slots execute only the hand-draw modifier.
+    /// 4. Execution-context eligibility (WS-0916-05, v4): a combat-scoped
+    ///    opcode must not ride a trigger that can fire without a combat
+    ///    context (the executor logs "skipped: no combat context" and drops
+    ///    it), and an effect that resolves against live enemies must not ride
+    ///    a trigger that fires after every enemy is dead. Both rules reject
+    ///    pairs only - the fragments stay in the pool, every one of them keeps
+    ///    at least one legal trigger, and no weight, budget, candidate order or
+    ///    RNG draw changes for the candidates that stay eligible.
     /// </summary>
-    private static bool Excluded(TriggerFragment? trigger, EffectFragment effect) =>
+    internal static bool Excluded(TriggerFragment? trigger, EffectFragment effect) =>
         (trigger is not null
             && trigger.Kind == "gold_gained"
             && effect.Opcode == "gain_gold")
         || (effect.Opcode == "gain_max_hp"
-            && (trigger is null || trigger.Kind != "obtained"));
+            && (trigger is null || trigger.Kind != "obtained"))
+        || (trigger is null && effect.Opcode != PassiveOpcode)
+        || (trigger is not null
+            && TriggersWithoutCombatContext.Contains(trigger.Kind)
+            && EffectFragment.CombatScopedOpcodes.Contains(effect.Opcode))
+        || (trigger is not null
+            && TriggersAfterEnemiesAreDead.Contains(trigger.Kind)
+            && effect.Target == EnemyTarget);
 
     public static IReadOnlyList<GeneratedRelicDefinition> Generate(string runSeed, RelicFragmentPool pool)
     {
@@ -216,11 +302,21 @@ public static class RelicGenerator
             TriggerFragment? trigger = null;
             var effects = new List<EffectFragment>();
 
+            EffectFragment? passive = null;
             if (pool.PassiveEffects.Count > 0 && random.Next(100) < PassiveRelicChancePercent)
             {
-                EffectFragment passive = PickUniquely(random, pool.PassiveEffects,
+                passive = PickUniquely(random, pool.PassiveEffects,
                     e => usedPassives.Add(e.ShapeKey), e => !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e))
-                    ?? pool.PassiveEffects[random.Next(pool.PassiveEffects.Count)];
+                    // Every remaining passive is already used by this run; fall
+                    // back only among passives that are eligible, and if there is
+                    // no eligible one at all, generate a triggered relic instead
+                    // (never sample an ineligible passive: its opcode is one no
+                    // passive hook executes, so its text would be dead).
+                    ?? PickEligiblePassive(random, pool.PassiveEffects);
+            }
+
+            if (passive is not null)
+            {
                 usedPassives.Add(passive.ShapeKey);
                 effects.Add(passive);
             }
@@ -262,10 +358,14 @@ public static class RelicGenerator
                 };
                 effects.Clear();
                 trigger = null;
+                EffectFragment? retryPassive = null;
                 if (pool.PassiveEffects.Count > 0 && random.Next(100) < PassiveRelicChancePercent)
                 {
-                    var passive = pool.PassiveEffects[random.Next(pool.PassiveEffects.Count)];
-                    effects.Add(passive);
+                    retryPassive = PickEligiblePassive(random, pool.PassiveEffects);
+                }
+                if (retryPassive is not null)
+                {
+                    effects.Add(retryPassive);
                 }
                 else
                 {
@@ -323,6 +423,35 @@ public static class RelicGenerator
         Func<T, bool> eligible)
         where T : class
         => PickWeightedUniquely(random, pool, markUsed, eligible, _ => NormalWeight);
+
+    /// <summary>
+    /// Uniform draw over the passives that pass <see cref="Excluded"/>, or null
+    /// when the pool holds no eligible passive at all.
+    ///
+    /// This exists because the passive fallback used to index the raw pool
+    /// (<c>pool.PassiveEffects[random.Next(count)]</c>), bypassing eligibility
+    /// entirely: it could hand a relic a fragment no passive hook executes,
+    /// i.e. text that promises an effect nothing runs. An ineligible passive is
+    /// never returned - the caller generates a triggered relic instead.
+    ///
+    /// Draw cost matches the raw index it replaces: exactly one
+    /// <see cref="DeterministicRandom.Next(int)"/> when any eligible passive
+    /// exists, so a slot that stays on the passive path keeps its stream.
+    /// </summary>
+    private static EffectFragment? PickEligiblePassive(
+        DeterministicRandom random,
+        IReadOnlyList<EffectFragment> passives)
+    {
+        var candidates = new List<EffectFragment>(passives.Count);
+        foreach (EffectFragment passive in passives)
+        {
+            if (!Excluded(null, passive))
+            {
+                candidates.Add(passive);
+            }
+        }
+        return candidates.Count == 0 ? null : candidates[random.Next(candidates.Count)];
+    }
 
     /// <summary>
     /// Weighted variant of PickUniquely: uniform over total weight, no

@@ -1,3 +1,43 @@
+## WS-0916-05 - 2026-09-16 - 生成期执行上下文合法性 (SeedVersion v4)
+
+### 问题
+
+`RelicGenerator` 只排除两种组合(金币自递归, `gain_max_hp` 非 obtained), 而执行器
+`AnthonyRelicModel.ExecuteEffectsAsync` 还会跳过两类效果: 无战斗上下文时的战斗域 opcode,
+以及敌人全死后 `all_enemies` 解析为空列表. 于是生成器能产出文字承诺了执行器不会跑的效果的
+遗物. 旧样本 "1200 次里 34 次" 是 v3 之前的数据, 不作为当前比例.
+
+### 修复
+
+- `EffectFragment.CombatScopedOpcodes` 成为唯一定义, 执行器改为引用它(原来是执行器私有副本),
+  消除两边漂移.
+- `RelicGenerator.Excluded` 增加规则 3(被动槽只承载 `modify_hand_draw`)与规则 4(战斗域 opcode
+  不配无战斗上下文的 trigger; `all_enemies` 效果不配敌人全死后的 trigger).
+- 被动回退路径 `pool.PassiveEffects[random.Next(count)]` 过去完全绕过合法性, 可采到执行器不跑的
+  片段; 改为 `PickEligiblePassive`, 无可选被动时改生成触发式遗物, 绝不采不合法片段.
+- `SeedVersion` v3 -> v4: 合法性规则变了, 旧档必须重新生成, 而不是继续使用执行器会跳过的遗物.
+
+### 依据(反编译 + 执行器源码, 无实机)
+
+- `PlayerCombatState` 全程序集仅 `Player.ResetCombatState()` 赋值一次且再不置 null -> 为空等价于
+  "尚未开战"; 池中只有 `obtained`/`gold_gained` 能在该窗口触发. `room_entered` 被执行器限定
+  `CombatRoom`, 且 `SetUpCombat`(含 `ResetCombatState`)先于 `Hook.AfterRoomEntered` 执行.
+- `combat_end`/`combat_victory` 只在 `IsCombatEnding` 为真(无存活主敌)后触发; `all_enemies` 解析为
+  `Enemies.Where(e => e.IsHittable)`, 死亡单位不可命中.
+- 执行器被动钩子只执行 `modify_hand_draw`.
+
+### 验证
+
+`tools/relic-eligibility-probe`(引擎外, 直接引用构建产物):
+
+- 配对空间 11 trigger x 12 effect = 132; 旧规则放行 121 对, 其中 18 对会被执行器跳过;
+  新规则放行 103 对, 0 对会被跳过.
+- 每个 effect 片段仍至少有 1 个合法 trigger; 200 seed 扫描下每个 effect 与 trigger 片段都可达.
+- 同 seed 生成结果指纹稳定.
+- 明确声明: 上述规则由反编译与执行器源码推导, **没有实机验证**.
+
+未做: 未启动游戏, 未部署.
+
 # DEVLOG - AutoAnthonyRelics (真正的东尼算法-遗物)
 
 过程记录。聊天只报方向 / 决断 / 问题 (D6)。

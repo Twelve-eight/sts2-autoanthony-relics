@@ -1,0 +1,339 @@
+using System.Text;
+using AutoAnthonyRelics.Data;
+using AutoAnthonyRelics.Generation;
+
+namespace RelicEligibilityProbe;
+
+/// <summary>
+/// Isolated probe for WS-0916-05: generation-time execution-context
+/// eligibility of relic trigger/effect pairs.
+///
+/// WHAT IT COMPILES: the mod's pure source layer (Data + Generation) is
+/// compiled INTO this probe, so the assertions bind to the current source
+/// rather than to a possibly stale mod build, and no Godot/BaseLib/Godot-static
+/// access is involved. It is deliberately not a second copy of the generator:
+/// the exclusion TABLE is asserted equal to the executor contract transcribed
+/// below, so the generator and the executor cannot drift apart silently.
+///
+/// WHAT IT PROVES (source-level, not a game run):
+/// 1. the pool shape and the pair space,
+/// 2. the generator's exclusion table equals the executor's skip conditions on
+///    every trigger/effect pair of the pool,
+/// 3. the new context rules only ever ADD exclusions,
+/// 4. for a fixed seed, the partition of the pair space into
+///    forbidden / emitted / eligible-but-unused,
+/// 5. no generated relic over a 200-seed sweep contains a pair the executor
+///    would skip in the context its trigger provides,
+/// 6. every effect fragment still has at least one legal trigger and is still
+///    reachable.
+///
+/// WHAT IT DOES NOT PROVE: that the engine really behaves as the decompile
+/// says. That evidence is the decompile itself (sts2.decompiled.cs) plus the
+/// executor source; it is cited in RelicGenerator.Excluded's doc comment. No
+/// game run backs this probe.
+/// </summary>
+internal static class Program
+{
+    private static int _failures;
+
+    private static void Check(bool condition, string label, string detail = "")
+    {
+        if (condition)
+        {
+            Console.WriteLine($"PASS  {label}");
+        }
+        else
+        {
+            _failures++;
+            Console.WriteLine($"FAIL  {label}  {detail}");
+        }
+    }
+
+    // ---------- The executor contract, as the probe's independent oracle ----------
+    //
+    // Transcribed from AnthonyRelicModel (the out-of-combat guard, the
+    // all_enemies cases, the ModifyHandDraw passive hook) and from the engine
+    // decompile (PlayerCombatState is assigned once and never nulled, so null
+    // means "no combat yet this run"; HittableEnemies is empty once every enemy
+    // is dead, which is guaranteed at combat end/victory).
+    //
+    // It is duplicated HERE on purpose: the probe is the oracle the product
+    // table is compared against. If the product rule changes without this
+    // contract changing, check 2 fails.
+
+    /// <summary>Triggers that can fire with PlayerCombatState == null.</summary>
+    private static readonly HashSet<string> NoCombatContextTriggers =
+        new(StringComparer.Ordinal) { "obtained", "gold_gained" };
+
+    /// <summary>Triggers that fire only after every enemy of the combat is dead.</summary>
+    private static readonly HashSet<string> EnemiesDeadTriggers =
+        new(StringComparer.Ordinal) { "combat_end", "combat_victory" };
+
+    private const string EnemyTarget = "all_enemies";
+    private const string PassiveOpcode = "modify_hand_draw";
+
+    /// <summary>True when the executor drops this effect in this trigger's context.</summary>
+    private static bool ExecutorWouldSkip(string triggerKind, EffectFragment effect) =>
+        (EffectFragment.CombatScopedOpcodes.Contains(effect.Opcode)
+            && NoCombatContextTriggers.Contains(triggerKind))
+        || (effect.Target == EnemyTarget && EnemiesDeadTriggers.Contains(triggerKind));
+
+    /// <summary>Pre-v4 rules (recursion boundary + max-HP policy).</summary>
+    private static bool LegacyExcluded(string? triggerKind, EffectFragment effect) =>
+        (triggerKind is not null && triggerKind == "gold_gained" && effect.Opcode == "gain_gold")
+        || (effect.Opcode == "gain_max_hp" && (triggerKind is null || triggerKind != "obtained"));
+
+    /// <summary>The full exclusion contract the generator must implement.</summary>
+    private static bool OracleExcluded(string? triggerKind, EffectFragment effect) =>
+        LegacyExcluded(triggerKind, effect)
+        || (triggerKind is null && effect.Opcode != PassiveOpcode)
+        || (triggerKind is not null && ExecutorWouldSkip(triggerKind, effect));
+
+    public static int Main()
+    {
+        Console.OutputEncoding = Encoding.UTF8;
+
+        RelicAtomPool atoms = RelicAtomData.LoadAtoms();
+        RelicLedger ledger = RelicAtomData.LoadLedger();
+        RelicFragmentPool pool = RelicFragmentPool.Build(atoms, ledger);
+
+        // ---- 1. Pool shape.
+        var kinds = pool.Triggers.Select(t => t.Kind).Distinct(StringComparer.Ordinal).OrderBy(k => k, StringComparer.Ordinal).ToList();
+        var opcodes = pool.TriggeredEffects.Select(e => e.Opcode).Distinct(StringComparer.Ordinal).OrderBy(o => o, StringComparer.Ordinal).ToList();
+        var shapes = pool.TriggeredEffects.Select(e => e.ShapeKey).Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.Ordinal).ToList();
+        var combatShapes = pool.TriggeredEffects.Where(e => EffectFragment.CombatScopedOpcodes.Contains(e.Opcode))
+            .Select(e => e.ShapeKey).Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.Ordinal).ToList();
+        var enemyShapes = pool.TriggeredEffects.Where(e => e.Target == EnemyTarget)
+            .Select(e => e.ShapeKey).Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.Ordinal).ToList();
+
+        Console.WriteLine("---- pool (ledger-filtered) ----");
+        Console.WriteLine($"trigger fragments (Kind|Condition) : {pool.Triggers.Count}");
+        Console.WriteLine($"distinct trigger Kinds            : {kinds.Count}  {string.Join(", ", kinds)}");
+        Console.WriteLine($"triggered effect fragments        : {pool.TriggeredEffects.Count}");
+        Console.WriteLine($"distinct effect opcodes           : {opcodes.Count}");
+        Console.WriteLine($"distinct effect shapes            : {shapes.Count}");
+        Console.WriteLine($"passive fragments                 : {pool.PassiveEffects.Count}");
+        Console.WriteLine($"combat-scoped shapes              : {combatShapes.Count}");
+        foreach (string shape in combatShapes)
+        {
+            Console.WriteLine($"    {shape}");
+        }
+        Console.WriteLine($"all_enemies shapes                : {enemyShapes.Count}");
+        foreach (string shape in enemyShapes)
+        {
+            Console.WriteLine($"    {shape}");
+        }
+        Console.WriteLine();
+        Console.WriteLine("---- pair space ----");
+        Console.WriteLine($"Kinds x opcodes   : {kinds.Count} x {opcodes.Count} = {kinds.Count * opcodes.Count}");
+        Console.WriteLine($"Kinds x shapes    : {kinds.Count} x {shapes.Count} = {kinds.Count * shapes.Count}");
+        Console.WriteLine($"trigger keys x shapes : {pool.Triggers.Count} x {shapes.Count} = {pool.Triggers.Count * shapes.Count}");
+
+        // ---- 2. The exclusion table equals the executor contract, on every pair.
+        bool tableOk = true;
+        bool monotoneOk = true;
+        var forbidden = new List<string>();
+        foreach (string kind in kinds)
+        {
+            TriggerFragment representative = pool.Triggers.First(t => t.Kind == kind);
+            foreach (EffectFragment effect in pool.TriggeredEffects)
+            {
+                bool actual = RelicGenerator.Excluded(representative, effect);
+                bool expected = OracleExcluded(kind, effect);
+                if (actual != expected)
+                {
+                    tableOk = false;
+                    Console.WriteLine($"  table mismatch: {kind} x {effect.ShapeKey}: generator={actual} oracle={expected}");
+                }
+                // The context rules must only ADD exclusions.
+                if (!LegacyExcluded(kind, effect) && actual && !ExecutorWouldSkip(kind, effect))
+                {
+                    monotoneOk = false;
+                    Console.WriteLine($"  non-context exclusion added: {kind} x {effect.ShapeKey}");
+                }
+                if (expected)
+                {
+                    forbidden.Add($"{kind} x {effect.ShapeKey}");
+                }
+            }
+        }
+        foreach (EffectFragment passive in pool.PassiveEffects)
+        {
+            bool actual = RelicGenerator.Excluded(null, passive);
+            bool expected = OracleExcluded(null, passive);
+            if (actual != expected)
+            {
+                tableOk = false;
+                Console.WriteLine($"  table mismatch (passive): {passive.ShapeKey}: generator={actual} oracle={expected}");
+            }
+            if (expected)
+            {
+                forbidden.Add($"(passive) x {passive.ShapeKey}");
+            }
+        }
+        Check(tableOk, "exclusion table equals the executor contract on every pool pair");
+        Check(monotoneOk, "context rules only add exclusions (no legacy-eligible pair becomes ineligible for another reason)");
+
+        // ---- 3. Soundness of each rule, stated separately.
+        var nullCtxViolations = (from kind in kinds
+                                 from e in pool.TriggeredEffects
+                                 where NoCombatContextTriggers.Contains(kind)
+                                    && EffectFragment.CombatScopedOpcodes.Contains(e.Opcode)
+                                 where !RelicGenerator.Excluded(pool.Triggers.First(t => t.Kind == kind), e)
+                                 select $"{kind} x {e.ShapeKey}").ToList();
+        Check(nullCtxViolations.Count == 0,
+            "rule (a): every no-combat trigger x combat-scoped effect pair is excluded",
+            string.Join(", ", nullCtxViolations));
+
+        var deadEnemyViolations = (from kind in kinds
+                                   from e in pool.TriggeredEffects
+                                   where EnemiesDeadTriggers.Contains(kind) && e.Target == EnemyTarget
+                                   where !RelicGenerator.Excluded(pool.Triggers.First(t => t.Kind == kind), e)
+                                   select $"{kind} x {e.ShapeKey}").ToList();
+        Check(deadEnemyViolations.Count == 0,
+            "rule (b): every dead-enemy trigger x all_enemies pair is excluded",
+            string.Join(", ", deadEnemyViolations));
+
+        // Coarser (Kind x opcode) view of the same table: 12 x 13 = 156 pairs,
+        // the space the fixed-seed partition below is reported against.
+        var forbiddenKindOpcode = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string kind in kinds)
+        {
+            foreach (EffectFragment effect in pool.TriggeredEffects)
+            {
+                if (OracleExcluded(kind, effect))
+                {
+                    forbiddenKindOpcode.Add($"{kind}|{effect.Opcode}");
+                }
+            }
+        }
+
+        int ruleA = NoCombatContextTriggers.Count * combatShapes.Count;
+        int ruleBNew = (from kind in EnemiesDeadTriggers
+                        from shape in enemyShapes
+                        where !(NoCombatContextTriggers.Contains(kind)
+                            && EffectFragment.CombatScopedOpcodes.Contains(shape.Split('|')[0]))
+                        select shape).Count();
+        Console.WriteLine();
+        Console.WriteLine("---- rule (a)/(b) reach over the pool ----");
+        Console.WriteLine($"rule (a) rejects : {NoCombatContextTriggers.Count} no-combat triggers x {combatShapes.Count} combat-scoped shapes = {ruleA} (Kind x shape)");
+        Console.WriteLine($"rule (b) rejects : {EnemiesDeadTriggers.Count} dead-enemy triggers x {enemyShapes.Count} all_enemies shapes = {EnemiesDeadTriggers.Count * enemyShapes.Count}, of which {ruleBNew} are not already rejected by (a)");
+        Console.WriteLine($"context rejections (union, Kind x shape) : {ruleA + ruleBNew} of {kinds.Count * shapes.Count}");
+        Console.WriteLine($"all exclusions      (union, Kind x shape) : {forbidden.Count} of {kinds.Count * shapes.Count}");
+        Console.WriteLine($"all exclusions      (Kind x opcode)      : {forbiddenKindOpcode.Count} of {kinds.Count * opcodes.Count}");
+        Console.WriteLine("  NOTE opcode granularity is coarser than the rule: apply_power's all_enemies");
+        Console.WriteLine("  variant is forbidden under the dead-enemy triggers while its self variants are");
+        Console.WriteLine("  legal there, so a Kind x opcode count cannot express the rule exactly.");
+
+        // ---- 4. Fixed seed: partition the (Kind x opcode) space.
+        const string fixedSeed = "eligibility-fixed-2026-09-16";
+        IReadOnlyList<GeneratedRelicDefinition> run = RelicGenerator.Generate(fixedSeed, pool);
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (GeneratedRelicDefinition definition in run)
+        {
+            if (definition.Trigger is null)
+            {
+                continue;
+            }
+            foreach (EffectFragment effect in definition.Effects)
+            {
+                emitted.Add($"{definition.Trigger.Kind}|{effect.Opcode}");
+            }
+        }
+        int emittedCount = emitted.Count;
+        int unusedEligible = kinds.Count * opcodes.Count - emittedCount - forbiddenKindOpcode.Count;
+        Console.WriteLine();
+        Console.WriteLine($"---- fixed seed '{fixedSeed}' over the {kinds.Count * opcodes.Count}-pair (Kind x opcode) space ----");
+        Console.WriteLine($"forbidden by eligibility : {forbiddenKindOpcode.Count}");
+        Console.WriteLine($"emitted by this seed     : {emittedCount}");
+        Console.WriteLine($"eligible but not drawn   : {unusedEligible}");
+        Console.WriteLine("forbidden pairs:");
+        foreach (string pair in forbiddenKindOpcode.OrderBy(p => p, StringComparer.Ordinal))
+        {
+            Console.WriteLine($"    {pair}");
+        }
+
+        // ---- 5. No generated relic contains a pair the executor would skip.
+        var skipped = new List<string>();
+        var passiveDead = new List<string>();
+        for (int i = 0; i < 200; i++)
+        {
+            IReadOnlyList<GeneratedRelicDefinition> sweep = RelicGenerator.Generate($"eligibility-soak-{i}", pool);
+            foreach (GeneratedRelicDefinition definition in sweep)
+            {
+                if (definition.Trigger is null)
+                {
+                    foreach (EffectFragment effect in definition.Effects)
+                    {
+                        if (effect.Opcode != PassiveOpcode)
+                        {
+                            passiveDead.Add($"seed {i} slot {definition.Slot}: {effect.ShapeKey}");
+                        }
+                    }
+                    continue;
+                }
+                foreach (EffectFragment effect in definition.Effects)
+                {
+                    if (ExecutorWouldSkip(definition.Trigger.Kind, effect))
+                    {
+                        skipped.Add($"seed {i} slot {definition.Slot}: {definition.Trigger.Kind} x {effect.ShapeKey}");
+                    }
+                }
+            }
+        }
+        Check(skipped.Count == 0, "200-seed sweep: no relic pairs an effect with a trigger that would skip it",
+            skipped.Count == 0 ? "" : string.Join(" | ", skipped.Take(5)));
+        Check(passiveDead.Count == 0, "200-seed sweep: every passive relic carries the passive opcode",
+            passiveDead.Count == 0 ? "" : string.Join(" | ", passiveDead.Take(5)));
+
+        // ---- 6. Every fragment keeps a legal trigger, and stays reachable.
+        bool everyEffectHasLegalTrigger = true;
+        foreach (EffectFragment effect in pool.TriggeredEffects)
+        {
+            int legal = kinds.Count(k => !OracleExcluded(k, effect));
+            if (legal == 0)
+            {
+                everyEffectHasLegalTrigger = false;
+                Console.WriteLine($"  no legal trigger left for {effect.ShapeKey}");
+            }
+        }
+        Check(everyEffectHasLegalTrigger, "every triggered effect fragment still has >= 1 legal trigger");
+
+        var usedEffects = new HashSet<string>(StringComparer.Ordinal);
+        var usedTriggers = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < 200; i++)
+        {
+            foreach (GeneratedRelicDefinition definition in RelicGenerator.Generate($"eligibility-soak-{i}", pool))
+            {
+                if (definition.Trigger is not null)
+                {
+                    usedTriggers.Add(definition.Trigger.Key);
+                }
+                foreach (EffectFragment effect in definition.Effects)
+                {
+                    usedEffects.Add(effect.Key);
+                }
+            }
+        }
+        var missingEffects = pool.TriggeredEffects.Concat(pool.PassiveEffects)
+            .Select(e => e.Key).Where(k => !usedEffects.Contains(k)).ToList();
+        Check(missingEffects.Count == 0, "200-seed sweep: every effect fragment reachable",
+            missingEffects.Count == 0 ? "" : string.Join(",", missingEffects));
+        Check(usedTriggers.Count == pool.Triggers.Count, "200-seed sweep: every trigger fragment reachable",
+            $"{usedTriggers.Count}/{pool.Triggers.Count}");
+
+        // ---- 7. Determinism is untouched by the new rules.
+        var again = RelicGenerator.Generate(fixedSeed, pool);
+        Check(again.Select(d => d.Fingerprint).SequenceEqual(run.Select(d => d.Fingerprint)),
+            "same seed -> byte-identical relic set after the eligibility change");
+
+        Console.WriteLine();
+        Console.WriteLine("NOTE  rule (a) and rule (b) are derived from the engine decompile");
+        Console.WriteLine("      (PlayerCombatState assigned once and never nulled; HittableEnemies empty");
+        Console.WriteLine("      once every enemy is dead, which combat end/victory guarantee) plus the");
+        Console.WriteLine("      executor source in AnthonyRelicModel. No game run backs these assertions.");
+        Console.WriteLine();
+        Console.WriteLine(_failures == 0 ? "PROBE OK" : $"PROBE FAILED: {_failures} check(s)");
+        return _failures == 0 ? 0 : 1;
+    }
+}

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>RelicEligibilityProbe</AssemblyName>
+    <RootNamespace>RelicEligibilityProbe</RootNamespace>
+    <!-- The mod sources below are compiled into THIS assembly, so no mod build
+         output is referenced and a stale artifact cannot be probed. That is the
+         2026-09-14 lesson from tools/relic-probe (an external review probe ran
+         against a pre-fix Debug DLL and reported fixed text as still broken). -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <!-- The mod's pure source layer: Data + Generation, none of which touches
+         Godot, BaseLib or MainFile (verified: the only external type is the
+         RelicRarity enum from sts2.dll). -->
+    <Compile Include="../../mod/Code/Data/AnthonyModels.cs" />
+    <Compile Include="../../mod/Code/Data/AnthonyEnums.cs" />
+    <Compile Include="../../mod/Code/Data/AnthonyCatalog.cs" />
+    <Compile Include="../../mod/Code/Data/RelicAtomData.cs" />
+    <Compile Include="../../mod/Code/Generation/GenerationTypes.cs" />
+    <Compile Include="../../mod/Code/Generation/RelicFragments.cs" />
+    <Compile Include="../../mod/Code/Generation/RelicText.cs" />
+    <Compile Include="../../mod/Code/Generation/RelicGenerator.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same JSON the mod embeds; RelicAtomData resolves them by filename suffix. -->
+    <EmbeddedResource Include="../../mod/Code/Data/Json/relic_atoms.json" LogicalName="relic_atoms.json" />
+    <EmbeddedResource Include="../../mod/Code/Data/Json/relic_atom_ledger.json" LogicalName="relic_atom_ledger.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only for the RelicRarity enum in the generator's signature. -->
+    <Reference Include="sts2"><HintPath>G:/steam/steamapps/common/Slay the Spire 2/data_sts2_windows_x86_64/sts2.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

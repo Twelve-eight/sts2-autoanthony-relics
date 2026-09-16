@@ -598,14 +598,14 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     // PlayerCombatState, killing the obtain chain and freezing the game's UI
     // in a render loop (real incident 2026-09-14). Run-scoped opcodes (heal,
     // gain_max_hp, gain_gold, gain_max_potion, modify_hand_draw) are safe.
-    // Downside opcodes are NOT in this set on purpose: the engine itself fires
-    // obtain-time self-damage / LoseMaxHp / LoseGold / AddCurseToDeck outside
-    // combat (FragrantMushroom, PrecariousShears, LeafyPoultice, SilkenTress,
-    // CursedPearl), and lose_hp's only triggers are obtained/turn_start.
-    private static readonly HashSet<string> CombatScopedOpcodes = new(StringComparer.Ordinal)
-    {
-        "apply_power", "gain_block", "gain_energy", "draw_cards", "deal_damage",
-    };
+    //
+    // The set lives on EffectFragment (single definition shared with the
+    // generator, which refuses to pair one of these opcodes with a trigger that
+    // has no combat context - RelicGenerator.Excluded rule 4). Two copies would
+    // let generation and execution drift apart, which is exactly the defect
+    // WS-0916-05 describes.
+    private static bool IsCombatScoped(string opcode) =>
+        EffectFragment.CombatScopedOpcodes.Contains(opcode);
 
     // Downside pool (user order 2026-09-15): curse fragments carry the source
     // relic's exact curse card in their Variant. AddCurseToDeck<T> is generic
@@ -646,11 +646,15 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     {
         context ??= new ThrowingPlayerChoiceContext();
         {
-            if (CombatScopedOpcodes.Contains(effect.Opcode) && owner.PlayerCombatState is null)
+            if (IsCombatScoped(effect.Opcode) && owner.PlayerCombatState is null)
             {
                 // Out-of-combat guard: this trigger fired outside any combat
-                // (obtain / room-entered / run-level hooks) - the combat-scoped
+                // (obtain / gold-gained / run-level hooks) - the combat-scoped
                 // command would NRE, so degrade to a skipped effect instead.
+                // Generation-time eligibility (RelicGenerator.Excluded rule 4)
+                // means a generated relic can no longer reach this line; the
+                // guard stays as the executor's own backstop for hand-written or
+                // save-migrated definitions.
                 MainFile.Logger.Info($"[{MainFile.ModId}] effect {effect.Opcode}/{effect.Variant} skipped: no combat context at this trigger");
                 return;
             }

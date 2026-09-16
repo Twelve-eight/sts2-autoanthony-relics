@@ -79,6 +79,44 @@ python "G:/omp works/AutoAnthonyRelics/.tmp/dotnet-env.py" \
 探针直接引用构建产物 dll 并调用 `AnthonyCatalog`, 断言数据层与独立 Python 实现
 逐项一致。**任何"编译并部署"都不等于"已验证"** —— 结论一律要有探针或实机证据。
 
+## 执行上下文合法性 (WS-0916-05, 2026-09-16, SeedVersion v4)
+
+生成器与执行器必须对"哪些 trigger x effect 组合能真的生效"持同一判断. 执行器
+(`AnthonyRelicModel.ExecuteEffectsAsync`) 在两类情形会静默跳过 effect: 没有战斗上下文
+(`PlayerCombatState is null`) 时跳过战斗域 opcode; `all_enemies` 目标在敌人全死后解析为
+空列表. 生成器过去不检查这两点, 于是能产出"文字承诺了执行器不会跑的效果"的遗物.
+
+`RelicGenerator.Excluded` 是生成期的一半, 在**每个采样点**生效(触发式抽取, 两次去重重抽,
+以及被动回退):
+
+1. 递归边界(v1): `gold_gained` 不配 `gain_gold`.
+2. `gain_max_hp` 只在 `obtained` 下出现.
+3. 被动槽只承载 `modify_hand_draw` -- 执行器的被动钩子只执行这个 opcode.
+4. 战斗域 opcode(`apply_power`/`gain_block`/`gain_energy`/`draw_cards`/`deal_damage`)
+   不配"可能在无战斗上下文时触发"的 trigger; `all_enemies` 效果不配"敌人已全死之后才触发"
+   的 trigger.
+
+判定依据(全部来自反编译与执行器源码, **无实机验证**):
+
+- `PlayerCombatState` 在整个程序集里只在 `Player.ResetCombatState()` 被赋值一次, 之后再未
+  置 null, 因此它为空恰好等价于"本局尚未开战". 池中只有 `obtained` 与 `gold_gained` 能在
+  该窗口触发; `room_entered` 被执行器限定为 `CombatRoom`, 而 `CombatRoom` 的
+  `SetUpCombat`(内含 `ResetCombatState`)先于 `Hook.AfterRoomEntered` 执行.
+- `combat_end` / `combat_victory` 只由 `CombatManager.EndCombatInternal` 调用, 该路径要求
+  `IsCombatEnding` 为真(无存活主敌), 且主敌死亡会连带清除残余敌人; 而 `all_enemies` 解析为
+  `Enemies.Where(e => e.IsHittable)`, 死亡单位 `IsHittable` 为假 -- 即空列表.
+- 执行器的被动钩子只执行 `modify_hand_draw`.
+
+`CombatScopedOpcodes` 单一定义在 `EffectFragment` 上, 生成器与执行器共用, 避免两边漂移
+(这正是本条目描述的缺陷).
+
+配对空间实测: 池内 11 个 trigger 片段 x 12 个 effect 片段 = 132 对; 旧规则放行 121 对, 其中
+**18 对**执行器会静默跳过(obtained/gold_gained x 8 个战斗域效果, 加上 combat_end/
+combat_victory x deal_damage); 新规则放行 103 对, 其中 0 对会被跳过. 每个 effect 片段仍至少
+有 1 个合法 trigger(最少的是 `gain_max_hp`, 只剩 `obtained`).
+
+权重、点数预算(负面 140 / 普通 100)、候选顺序与 RNG 抽取序列均未改变; 规则只做配对排除.
+
 ## 进度
 
 见 `DEVLOG.md`。当前: 阶段 A (骨架 + 数据层) 完成。
