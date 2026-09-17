@@ -14,9 +14,16 @@ namespace AutoAnthonyRelics;
 /// MP DETERMINISM: NOTHING here participates in generation. Definitions are a
 /// pure function of (mod id, version, run seed, slot), so both multiplayer
 /// ends regenerate the identical relic set from the engine-synced seed even
-/// if toggles differ. These toggles only gate whether the mod acts locally.
-/// That is the structural fix for the live-config-in-definition-key defect
-/// class (astra-advice item 5 / Qurious fingerprint cache).
+/// if toggles differ. That is the structural fix for the live-config-in-
+/// definition-key defect class (astra-advice item 5 / Qurious fingerprint
+/// cache).
+///
+/// BUT "toggles may differ" is only true for GENERATION, not for every local
+/// action. ReplaceVanillaRelics mutates a shared, replicated structure: the
+/// run grab bag. Stripping it on an MP client would diverge the client's bag
+/// from the host's, so the load-path hook skips the strip when this process is
+/// a NetGameType.Client (AnthonyRelicPoolReplacementMpGuard). Do NOT add a
+/// toggle that mutates replicated state without the same guard.
 /// </summary>
 [ConfigHoverTipsByDefault]
 internal class AutoAnthonyRelicsConfig : SimpleModConfig
