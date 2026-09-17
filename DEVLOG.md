@@ -849,7 +849,21 @@ changenote 前置 v0.1.7 条目, v0.1.6 原文作为历史保留(其 weight-140 
   -> 进 Act 1 BOSS 战(THE_KIN_BOSS). 三个敌人血条下方**都有红色剑图标 + 数值 1**(力量 1),
   同时能量读数为 **4**(基础 3 + 配对 offset +1). 即限制类词条与配对增益**两半都生效**.
   修复前该词条在正常战斗**永不生效**(owner 取自只对 trigger 生效的查找, 被动词条恒为 null).
-- **仍未验证**: BUG 2 的多人强制跳过分支与 BUG 3 的守卫需要双人局才能触发.
+- **extra_turn 路径已实机验证通过 (2026-09-17, 副本 A, 构建 `29bade36`)** -- 单人局即可测,
+  不需要双人局:
+  - **BUG 2/3 的正向路径**: 开局 -> `relic add RELIC013`(slot 13 "Scrambled Medallion" =
+    打出 0 张牌则获得额外回合) -> 第 1 回合**不打任何牌**直接结束回合. 引擎日志出现
+    `Player 1 (IRONCLAD) is taking an extra turn`; 手牌从 5 张换成全新 5 张, 而**弃牌堆计数为 0**
+    (抽牌堆 6 -> 1). 弃牌堆为 0 是判别关键: 普通结束回合会把旧手牌放进弃牌堆(应为 5), 实际为 0,
+    说明旧手牌被 `BeforeSideTurnEndEarly` **烧毁**. 即 BUG 2 的 flag 在单人局正确为 true(额外回合
+    正常授予), BUG 3 补上的第 4 个守卫**未误伤**单人局.
+  - **BUG 4 的拒绝路径**: 同局 `relic add WHISPERING`(WhisperingEarring)后进新战斗. 该遗物在
+    第 1 回合自动打出至多 13 张牌(截图确认敌人已受 18 伤害), 全部 `IsAutoPlay`; 结束第 1 回合后
+    引擎直接进 `turn 2 started`, **没有**新的 `is taking an extra turn` 日志 -- 即额外回合被正确
+    拒绝. 若缺 `AnyCardsPlayedThisTurn` 的 WhisperingEarring 子句, 历史检查会因全是 auto-play 而
+    返回 false, 从而误给额外回合.
+- **仍未验证**: BUG 2 的**多人强制跳过分支**(`_wasOwnerPartOfLastPlayerTurn = false` 那条路径)
+  需要双人局才能触发 -- 这是本轮唯一真正需要联机的项.
 - 副本 A 与副本 B 均已部署 `29bade36`, 三处(构建/副本A/副本B)md5 一致.
 - **自动化边界**: 用户占用前台时(如打 CS2)不抢焦点. 已验证 `PostMessage` 可在**不抢焦点**下
   驱动键盘(控制台开关/命令发送均成功), 且 `PrintWindow(.., 2)` 可后台截图; 但**鼠标按键对 Godot
