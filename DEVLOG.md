@@ -1029,3 +1029,30 @@ trigger/效果没有任何关系. 用户要求: 名字必须能让人**看出**�
    "补丁失效"的证据. 它只是**范围**问题, 不是功能不存在. 且存档里 87 个原版遗物是**旧档**的
    状态快照, 不能用来判断当前选项是否生效.
 3. **误从"日志 0 次"推断补丁未触发**: 见上文 (2).
+
+### 追加: MP 客户端不得剥离遗物袋(审查发现, 我引入的缺陷)
+
+上面那个 `LoadFromSerializable` Postfix **同时被 MP 客户端重同步路径命中**:
+`CombatStateSynchronizer.WaitForSync` 在 `Type != Host`(即客户端)时把 **host 的袋快照**
+下发覆盖本地. 在那里剥离会让**客户端袋 != host 袋** -- 只要两端 `ReplaceVanillaRelics` 不同就
+必然发生, 而这正是 `AutoAnthonyRelicsConfig` 注释里声称"结构上安全"的场景.
+
+`Populate` 钩子没有这个问题: 两端从同一 seed 重建.
+
+**修法**: `Apply()` 增加 `allowStrip`;`LoadFromSerializable` 的 Postfix 传
+`allowStrip: !IsClientMirror()`,`IsClientMirror()` 读
+`RunManager.Instance.NetService.Type == NetGameType.Client`(防御式, 任何异常都判为"非客户端",
+即保持剥离 -- 对本地存档而言"少剥离"是更安全的方向). **两个剥离分支都受它管**:客户端镜像上
+剥离我方占位模型(`Enabled=false` 分支)同样会让袋分歧. 跳过时日志标 `mirror-only`.
+
+```
+Singleplayer -> 剥离(本地存档)
+Host         -> 剥离(host 拥有自己的袋)
+Client       -> 不剥离(host 的镜像)
+```
+
+同时更正了 `AutoAnthonyRelicsConfig` 的 MP DETERMINISM 注释: "两端配置可不同"只对**生成**成立,
+不适用于**改动被复制的状态**(遗物袋), 并写明新增此类开关必须带同样的门控.
+
+**未验证**: MP 客户端路径本身未实机验证(需双端会话). 单机启动验证: 9 补丁类 0 失败, 自检报告
+两个 `Populate` 重载与 `LoadFromSerializable` 均解析, 0 崩溃, 0 AAR 错误.
