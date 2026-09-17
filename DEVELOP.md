@@ -190,6 +190,44 @@ opcode 粒度比规则粗 -- `apply_power` 的 `all_enemies` 变体在 dead-enem
 `QUERY_HOOKS` 按 **(遗物, 钩子)** 建键而非按钩子名: `TryModifyCardRewardOptionsLate` 在引擎里
 有 9 个实现者(附魔 / 升级 / Glam 各不相同), 按钩子名建键会把 8 个错误标签写进"可复现"的提取产物。
 
+## 遗物命名契约 (2026-09-17, SeedVersion v6)
+
+### 契约
+
+遗物名是**所选片段的纯函数**, 不是独立抽样:
+
+```
+name = Compose(morpheme(stemSource), morpheme(tailSource))
+stemSource ∈ provenance(trigger ∪ effects)      -- 必为真实来源
+tailSource ∈ allSources, 按 provenance 加权      -- 权重 64 : 1
+```
+
+- **词素表**: `RelicText.Morphemes`, 每个来源遗物一条, EN 与 ZHS 两个字段**都是该遗物官方标题的
+  子串**(45/45 已逐条核对权威 loc 转储). 查不到词素的来源**抛异常**, 绝不回退到臆造文本.
+- **provenance 是集合**: 片段按 effect shape 折叠, 折叠时 `SourceAtoms` 取**并集**
+  (`RelicFragmentPool.Build`). 这正是"可见来源"能成立的前提.
+- **确定性**: 命名使用**独立 RNG 流**(`.../slot/{n}/name`), 不消耗片段流的任何一次抽取; 候选顺序
+  与权重均为片段集合的纯函数(来源集合 Ordinal 排序), 不依赖字典枚举顺序.
+- **唯一性**: 同一 run 内 60 个名字互不相同(EN 与 ZHS 同时参与去重键); 词素对空间 45x44 足够.
+
+### 为什么"stem 必为真实来源"是硬要求
+
+用户要的是"读者能看出与来源遗物的联系". 若两次抽取都从全体词素里按权重取, 会有约 6% 的遗物
+两个词素都落在非来源词素上(实测 84/1320), 名字看着像有出处、实际与原子无关 -- 那是最坏的形态.
+因此 stem 从 provenance 集合内取, 保证**每一个**生成名都指向真实来源(实测 1320/1320, 0 例外).
+
+### RNG 消耗形状
+
+v5 -> v6 **确实改变了 RNG 消耗形状**, 不是预防性改动: 旧实现每个槽位从片段流里取 2 次
+`Next(24)`, 且重试路径上这两次抽取与片段抽取交错; 新实现完全不碰片段流, 改在独立 `/name` 流上
+抽取. 因此同 seed 在 v5 与 v6 下会产生不同的片段序列(v5 流少被抽 2 次), 旧档必须重新生成.
+
+### 池指纹不受影响
+
+`RelicFragmentPool.Fingerprint` 只由片段 **Key** 组成, provenance 不参与, 因此 v5/v6 之间
+指纹**逐字相同**(实测 `64D5C820863AACB1`). 缓存键 `(seed, SeedVersion, fingerprint)` 中区分新旧
+的是 `SeedVersion` 这一项.
+
 ## 进度
 
 见 `DEVLOG.md`.当前: 阶段 A (骨架 + 数据层) 完成.

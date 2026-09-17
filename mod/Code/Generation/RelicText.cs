@@ -156,40 +156,137 @@ public static class RelicText
         };
     }
 
-    private static readonly string[] AdjectivesEn =
+    /// <summary>
+    /// One source relic's name morpheme. Both fields are SUBSTRINGS of the
+    /// source relic's official title (verified against the engine's own
+    /// localization dump), so a reader who knows the source relic recognises it
+    /// in the generated name - which is the whole point of the scheme.
+    /// </summary>
+    public sealed record NameMorpheme(string Source, string En, string Zhs);
+
+    /// <summary>
+    /// Source relic -> name morpheme, for every source in the ledger's
+    /// supported atom set. This is the AAR equivalent of the original
+    /// Auto-Anthonyology's hand-authored `NameParts` / `ChineseSplitOverrides`
+    /// tables: the original splits each card's official name into chunks and
+    /// recombines two of them, so the generated name is visibly built from the
+    /// source cards' own words. Here each entry is one source relic's
+    /// distinguishing word, taken from its official title in BOTH languages.
+    ///
+    /// Coverage is asserted by <see cref="Morpheme"/>: a source with no entry
+    /// throws rather than silently falling back to invented text. The set is
+    /// closed (it is exactly the ledger's supported provenance), so this is a
+    /// data-completeness check, not a runtime branch.
+    /// </summary>
+    private static readonly NameMorpheme[] Morphemes =
     {
-        "Anthony's", "Anomalous", "Astral", "Bizarre", "Brazen", "Calculating", "Chaotic", "Cryptic",
-        "Curious", "Doubtful", "Erratic", "Experimental", "Improvised", "Incongruous", "Madcap", "Misplaced",
-        "Misremembered", "Odd", "Peculiar", "Perplexing", "Recalculated", "Rewritten", "Scrambled", "Unlikely",
+        new("Akabeko", "Akabeko", "赤牛"),
+        new("Anchor", "Anchor", "锚"),
+        new("BagOfMarbles", "Marbles", "弹珠"),
+        new("BagOfPreparation", "Preparation", "背包"),
+        new("BigMushroom", "Mushroom", "蘑菇"),
+        new("BlessedAntler", "Antler", "鹿角"),
+        new("BloodSoakedRose", "Rose", "玫瑰"),
+        new("BloodVial", "Vial", "血瓶"),
+        new("BronzeScales", "Scales", "鳞片"),
+        new("CallingBell", "Bell", "铃铛"),
+        new("CaptainsWheel", "Wheel", "舵盘"),
+        new("ChosenCheese", "Cheese", "芝士"),
+        new("CursedPearl", "Pearl", "珍珠"),
+        new("DragonFruit", "Dragon", "火龙果"),
+        new("Ectoplasm", "Ectoplasm", "外质"),
+        new("Fiddle", "Fiddle", "提琴"),
+        new("FragrantMushroom", "Fragrant", "芳香"),
+        new("GamePiece", "Piece", "棋子"),
+        new("Glitter", "Glitter", "亮片"),
+        new("GremlinHorn", "Gremlin", "地精"),
+        new("HornCleat", "Cleat", "夹板"),
+        new("Lantern", "Lantern", "灯笼"),
+        new("LeafyPoultice", "Poultice", "药膏"),
+        new("Mango", "Mango", "芒果"),
+        new("MeatOnTheBone", "Bone", "骨肉"),
+        new("OldCoin", "Coin", "钱币"),
+        new("PaelsEye", "Pael", "佩尔"),
+        new("PhialHolster", "Holster", "皮套"),
+        new("PhilosophersStone", "Stone", "贤者"),
+        new("PotionBelt", "Belt", "腰带"),
+        new("PrecariousShears", "Shears", "羊毛剪"),
+        new("PreservedFog", "Fog", "活雾"),
+        new("PrismaticGem", "Prism", "棱彩"),
+        new("RippleBasin", "Basin", "水盆"),
+        new("RoyalPoison", "Poison", "猛毒"),
+        new("RunicPyramid", "Pyramid", "金字塔"),
+        new("ScreamingFlagon", "Flagon", "酒壶"),
+        new("SealOfGold", "Seal", "金印"),
+        new("SereTalon", "Talon", "爪"),
+        new("SilkenTress", "Tress", "发束"),
+        new("Sozu", "Sozu", "添水"),
+        new("SpikedGauntlets", "Gauntlet", "手甲"),
+        new("Strawberry", "Strawberry", "草莓"),
+        new("Vajra", "Vajra", "金刚杵"),
+        new("VelvetChoker", "Choker", "颈圈"),
     };
 
-    private static readonly string[] NounsEn =
+    private static readonly Dictionary<string, NameMorpheme> MorphemeBySource = BuildMorphemeIndex();
+
+    /// <summary>
+    /// Every source relic this table covers, ordinal-sorted. Used as the floor
+    /// of the name pool (see RelicGenerator.PickName): the pool must never be
+    /// empty, so every known source is always a candidate at low weight.
+    /// </summary>
+    public static IReadOnlyList<string> AllSources { get; } = BuildSourceList();
+
+    private static IReadOnlyList<string> BuildSourceList()
     {
-        "Amulet", "Anvil", "Bauble", "Bell", "Bottle", "Censer", "Charm", "Coin",
-        "Compass", "Crown", "Dice", "Figurine", "Flask", "Fob", "Idol", "Keepsake",
-        "Locket", "Medallion", "Orb", "Pendant", "Prism", "Ring", "Sigil", "Talisman",
-    };
+        var sources = new List<string>(Morphemes.Length);
+        foreach (NameMorpheme morpheme in Morphemes)
+        {
+            sources.Add(morpheme.Source);
+        }
+        sources.Sort(StringComparer.Ordinal);
+        return sources;
+    }
 
-    private static readonly string[] AdjectivesZhs =
+    private static Dictionary<string, NameMorpheme> BuildMorphemeIndex()
     {
-        "安东尼的", "异常的", "星界的", "怪异的", "莽撞的", "精算的", "混沌的", "晦涩的",
-        "好奇的", "存疑的", "反复无常的", "实验性的", "即兴的", "失调的", "疯狂的", "放错处的",
-        "记错的", "奇特的", "非凡的", "费解的", "重算的", "重写的", "打乱的", "不太可能的",
-    };
+        var index = new Dictionary<string, NameMorpheme>(StringComparer.Ordinal);
+        foreach (NameMorpheme morpheme in Morphemes)
+        {
+            index.Add(morpheme.Source, morpheme);
+        }
+        return index;
+    }
 
-    private static readonly string[] NounsZhs =
+    /// <summary>
+    /// The morpheme of one source relic. <paramref name="atomId"/> is an atom id
+    /// (<c>Akabeko#AfterSideTurnStart#0</c>); the source is the part before the
+    /// first '#', which is how every other provenance consumer in the mod reads
+    /// it.
+    /// </summary>
+    public static NameMorpheme Morpheme(string atomId)
     {
-        "护身符", "铁砧", "小饰品", "铃铛", "瓶子", "香炉", "符咒", "硬币",
-        "罗盘", "王冠", "骰子", "小雕像", "烧瓶", "表坠", "神像", "纪念物",
-        "盒坠", "大勋章", "宝珠", "吊坠", "棱镜", "戒指", "印记", "护符",
-    };
+        int hash = atomId.IndexOf('#');
+        string source = hash < 0 ? atomId : atomId[..hash];
+        if (!MorphemeBySource.TryGetValue(source, out NameMorpheme? morpheme))
+        {
+            // Fail loud rather than invent: an unmapped source means the ledger
+            // gained provenance this table has not been extended for.
+            throw new InvalidOperationException(
+                $"no name morpheme for source relic '{source}' (atom '{atomId}'); add it to RelicText.Morphemes");
+        }
+        return morpheme;
+    }
 
-    public static string NameEn(int adjectiveIndex, int nounIndex) =>
-        $"{AdjectivesEn[adjectiveIndex % AdjectivesEn.Length]} {NounsEn[nounIndex % NounsEn.Length]}";
+    /// <summary>
+    /// Compose a relic name from two source morphemes. English joins with a
+    /// space and keeps each morpheme's own casing; Chinese concatenates, since
+    /// the language has no word separator (the original's ComposeChinese does
+    /// the same).
+    /// </summary>
+    public static string ComposeEn(string stem, string tail) => $"{stem} {tail}";
 
-    public static string NameZhs(int adjectiveIndex, int nounIndex) =>
-        AdjectivesZhs[adjectiveIndex % AdjectivesZhs.Length] + NounsZhs[nounIndex % NounsZhs.Length];
+    public static string ComposeZhs(string stem, string tail) => stem + tail;
 
     public const string FlavorEn = "The algorithm insists this is a relic.";
-    public const string FlavorZhs = "算法坚持说这是一件遗物。";
+    public const string FlavorZhs = "算法坚持说这是一件遗物.";
 }

@@ -37,7 +37,7 @@
   全部排除 71 of 252(Kind x shape)/ 26 of 156(Kind x opcode). 以 shape 计数为准(opcode 粒度不足以
   表达 `apply_power` 的 all_enemies/self 变体区别).
 - 200-seed 扫描: 每个 effect 与 trigger 片段仍可达; 同 seed 逐字节一致.
-- **实机核对(2026-09-17, `I:\Slay the Spire 2` Goldberg 副本, 0.1.6)**: 启动行 `15 triggers,
+- **实机核对(2026-09-17, `I:\Slay the Spire 2`(`I:` 已于 2026-09-17 迁至 `E:\Slay the Spire 2`, 见 AGENTS.md Sec 2b) Goldberg 副本, 0.1.6)**: 启动行 `15 triggers,
   31 triggered effects, 2 passives` 与探针逐字一致; 真实对局中遗物生成走 `obtained` 路径无异常.
 - 初版提交写的 132/121/18/103 是错的: 用了过期的 `research/relic_atom_ledger.json`(25 supported)
   而非运行时 `mod/Code/Data/Json/relic_atom_ledger.json`(36 supported), 且漏算 `EffectFragment.Key`
@@ -783,7 +783,7 @@ docstring: `ShouldProcurePotion` 这类是引擎**具名钩子**, 实现体返�
 `AfterCreatureAddedToCombat` / `BeforeSideTurnEndEarly`, 加 `PassivesWith`/`HasPassive` 辅助.
 `RelicText` EN+ZHS 补齐全部新 opcode (缺失会在渲染时抛异常); `Glam` 无权威 zhs 译名, 保留英文.
 
-### 实机验证 (副本 A `I:\Slay the Spire 2`, vulkan, 0.1.6 + build #2)
+### 实机验证 (副本 A `I:\Slay the Spire 2`(`I:` 已于 2026-09-17 迁至 `E:\Slay the Spire 2`, 见 AGENTS.md Sec 2b), vulkan, 0.1.6 + build #2)
 
 **已通过**:
 - 启动日志池构成与探针逐字一致: 156 atoms / 47 supported / 26 rejected; 15 triggers / 31
@@ -883,3 +883,92 @@ changenote 前置 v0.1.7 条目, v0.1.6 原文作为历史保留(其 weight-140 
   驱动键盘(控制台开关/命令发送均成功), 且 `PrintWindow(.., 2)` 可后台截图; 但**鼠标按键对 Godot
   无效**(悬停生效, 按键被忽略, 伪造 WM_ACTIVATE/WM_SETFOCUS 也不行), 因此需点击的验证只能在
   用户空闲时做.
+
+## 2026-09-17 遗物名由原子来源派生 (用户指令, SeedVersion v6)
+
+### 问题
+
+遗物名与效果**完全无关**: `RelicGenerator.PickName` 从 `RelicText` 的两张 24 词表
+(`AdjectivesEn`/`NounsEn` 与对应 zhs)里各抽一个词, 于是 "Chaotic Orb"(混沌的宝珠)与它的
+trigger/效果没有任何关系. 用户要求: 名字必须能让人**看出**它由哪些原子重组而来.
+
+### 参照物: 原版 Auto-Anthonyology 的卡名机制(反编译 `ChaosCardGenerator.CardNameGenerator`)
+
+原版**不是**从"幸存的那个原子"取名的. 机制三段:
+
+1. `BuildSourcePool(catalog, card, ..)`: 对**每一张**源卡按"与生成卡的相似度"加权建池 --
+   `DiceSimilarity(descriptionSchemas, recipeSchemas) * 1000 + DiceSimilarity(templates, recipeTemplates)`,
+   再 `weight = 1 + tuple.Item1/50 + primaryEffectSimilarity*80 + sameTypeSameCost*30 + sameType*10`.
+   关键性质: 池是**全体**源卡, 匹配者以最高约 2283:1 压过地板权重 1(DiceSimilarity 上界
+   100 -> `1 + (100*1000+100)/50 + 3*80 + 30 + 10`), 因此池**永不枯竭**.
+2. `WeightedNameSourcePool.Sample` 抽**两个** `NameParts`(累积权重 + `Array.BinarySearch`).
+3. `ComposeChinese` / `ComposeEnglish` 把两个 `NameParts` 的词块拼起来;
+   `ChineseSplitOverrides` 与 `ManualExternalNameParts` 是手工词块表.
+   随后 `TryCreateUniqueName` 在 `max(512, poolSize*24)` 次内保证唯一.
+
+即: **名字由来源的名字词块组成, 且来源池带地板权重**. AAR 的对应物: "与生成卡相似" -> "确实
+贡献了原子"(精确 provenance), 地板权重保留下来只为给单一来源的遗物补第二个词素.
+
+### 折叠陷阱(决定了实现形状)
+
+`EffectFragment.SourceAtom` 原本只存**一个** `atom.Id`, 而片段按 `Key` 折叠且**后写覆盖**
+(`bucket[effect.Key] = effect;`), `Key` 又不含来源. 于是折叠片段保留的 `SourceAtom` 是
+**任意**的, 不是来源集合 -- `modify_max_energy` 有 7 个来源, `gain_energy`/`draw_cards`/
+`gain_max_hp` 各有 2 个, `obtained` 折叠 15 个, `turn_start|first_turn` 折叠 4 个.
+
+**选择: 方案 (b) -- 让折叠保留全部来源.** `EffectFragment`/`TriggerFragment` 的
+`SourceAtom`(单值)改为 `SourceAtoms`(`IReadOnlyList<string>`), 折叠时取**并集**
+(`RelicFragmentPool.Union`, Ordinal 排序, 与账本数组顺序无关). 理由: 用户要的正是"可见的真实
+出处", 方案 (a)(从语义取名)只能表达机制、表达不了具体来源, 恰好丢掉这个特性的全部价值; 而
+方案 (b) 让名字能指向真实来源. 代价是片段形状变了, 已逐项核对:
+
+- **池指纹不变**: `Fingerprint` 只由片段 `Key` 组成, provenance 不参与 -> v5/v6 指纹逐字相同
+  (实测两边均 `64D5C820863AACB1`). 缓存键里区分新旧的是 `SeedVersion` 这一项.
+- 无任何序列化路径(`JsonSerializer`)涉及这些片段; 使用点只有执行器的两处诊断字符串(已改为
+  打印来源集合)与探针.
+- 折叠顺序本身**确定性**: 遍历 `ledger.Supported` 的 JSON 数组顺序, 且并集后排序, 因此与字典
+  枚举顺序无关.
+
+### 实现
+
+- `RelicText.Morphemes`: 45 个来源遗物各一条 `NameMorpheme(Source, En, Zhs)`. 两个字段**都是
+  该遗物官方标题的子串**(逐条对照权威 loc 转储 `f05-verify/{eng,zhs}-relics.json`, 45/45 通过),
+  例如 `BagOfPreparation` -> `Preparation`/`背包`, `PrecariousShears` -> `Shears`/`羊毛剪`.
+  查不到词素**抛异常**, 不回退到臆造文本(用户要求: 没有合适词素就报告, 不要发明).
+- `RelicGenerator.PickName(random, trigger, effects, used)`:
+  - `provenance` = trigger 与全部 effect 的 `SourceAtoms` 去重后的来源集合(Ordinal 排序);
+  - **stem 必从 provenance 内取** -- 保证**每一个**名字都含真实来源词素;
+  - tail 从全体来源按权重取(provenance 64 : 其他 1), 与原件的地板权重同形, 保证词素对空间
+    足够(45x44), 单一来源遗物也能拿到第二个词素;
+  - 去重键含 EN 与 ZHS 两者(避免中文玩家看到同名).
+- 调用点在**片段选完之后**, 且用**独立 RNG 流** `{ModId}/{SeedVersion}/{seed}/slot/{n}/name`
+  (重试路径同理 `.../retry/{r}/name`).
+- 旧的两张形容词/名词表已**整段删除**(无死代码); `RelicText.NameEn/NameZhs` 一并移除.
+
+### SeedVersion v5 -> v6: RNG 消耗形状确实变了(非预防性)
+
+旧实现每个槽位从**片段流**取 2 次 `Next(24)`, 且重试路径上与片段抽取交错; 新实现完全不碰片段流.
+因此 v5 与 v6 同 seed 的片段序列必然不同, 旧档必须重新生成, 与 v4->v5 同理.
+
+**隔离实验证明命名代码本身不扰动片段抽样**: 把 v6 源码的 `SeedVersion` 临时改回 `relics-v5`,
+对 22 个 seed / 1320 槽位输出片段投影, 与改动前的基线**逐字节相同**. 因此真实构建里观察到的
+片段变化**全部**归因于 v5->v6 版本串, 与命名无关.
+
+### 验证(全部实测, 无实机)
+
+- `dotnet build AutoAnthonyRelics.csproj -c Release -p:CopyToModsFolderOnBuild=false`: **0 警告 0 错误**.
+- `tools/relic-eligibility-probe`: **PROBE OK**, 含 `same seed -> byte-identical relic set` PASS.
+- `tools/relic-probe`: **PROBE OK**(顺带修正 5 项**先于本次改动**就已过期的断言: 硬编码的
+  146 atoms/36 supported 应为 156/47; `passiveSupported` 只有 `modify_hand_draw`, 而 v5 的 11 个
+  被动 opcode 执行器**都已实现**; 金额检查漏掉 restriction/benefit 这类无数字旗标;
+  `cross-source` 的"触发来源与效果来源不相交"在 provenance 变成集合后是**错判据** -- `obtained`
+  折叠 15 个来源, 几乎必然与任何效果来源相交, 已改为"该遗物 provenance 至少跨 2 个来源"
+  (实测 1056/1070 = 98.7%, 而相交判据只有 942/1070 = 88.0%)).
+- 命名覆盖(22 seeds x 60 槽位 = 1320): 数字后缀兜底 **0**; stem 非真实来源 **0**;
+  ZHS 未以真实来源词素开头 **0**; 同 run 内重名 **0**; 词素 45/45 均为官方标题子串.
+
+### 未做 / 边界
+
+- 未实机验证(需用户启动游戏看遗物名); 词素表覆盖的是账本 47 条 supported 原子涉及的 45 个来源,
+  若账本将来纳入新来源, `RelicText.Morpheme` 会**抛异常**提示补表, 而不是静默降级.
+- `Glam` 等无权威 zhs 译名者沿用英文, 与既有约定一致(见 v5 条目).

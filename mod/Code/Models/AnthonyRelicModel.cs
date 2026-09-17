@@ -1116,7 +1116,7 @@ public abstract class AnthonyRelicModel : CustomRelicModel
                     break;
                 default:
                     throw new InvalidOperationException(
-                        $"unsupported relic effect {effect.Opcode}/{effect.Variant}/{effect.Target} on atom {effect.SourceAtom}");
+                        $"unsupported relic effect {effect.Opcode}/{effect.Variant}/{effect.Target} on atom(s) {string.Join(",", effect.SourceAtoms)}");
             }
         }
     }
@@ -1126,7 +1126,7 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         if (s_addCurse is null || !CurseTypes.TryGetValue(effect.Variant ?? "", out Type? curseType))
         {
             throw new InvalidOperationException(
-                $"unsupported curse variant {effect.Variant} on atom {effect.SourceAtom}");
+                $"unsupported curse variant {effect.Variant} on atom(s) {string.Join(",", effect.SourceAtoms)}");
         }
         var task = (Task)s_addCurse.MakeGenericMethod(curseType).Invoke(null, new object?[] { owner })!;
         await task;

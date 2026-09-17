@@ -12,7 +12,7 @@ namespace AutoAnthonyRelics.Generation;
 /// to relics. The source pairing is never carried over: generation samples a
 /// trigger from one relic and an effect from a different relic.
 /// </summary>
-public sealed record TriggerFragment(string Kind, string? Condition, string SourceAtom)
+public sealed record TriggerFragment(string Kind, string? Condition, IReadOnlyList<string> SourceAtoms)
 {
     public string Key => $"{Kind}|{Condition ?? "-"}";
 }
@@ -23,7 +23,7 @@ public sealed record EffectFragment(
     string? Target,
     IReadOnlyList<ResolvedValue> Values,
     bool IsPassive,
-    string SourceAtom,
+    IReadOnlyList<string> SourceAtoms,
     string? Condition = null)
 {
     public string Key => $"{Opcode}|{Variant ?? "-"}|{Target ?? "-"}|{IsPassive}|{ValuesKey}";
@@ -244,22 +244,40 @@ public sealed class RelicFragmentPool
             string? effectCondition = isPassive
                 ? (fix.Condition ?? spec.Condition?.Kind)
                 : null;
-            var effect = new EffectFragment(opcode, variant, target, values, isPassive, atom.Id, effectCondition);
+            var effect = new EffectFragment(opcode, variant, target, values, isPassive, new[] { atom.Id }, effectCondition);
             // Passive fragments split by polarity: strict benefits ride their
             // own 5% gate, everything else (hand-draw modifiers either sign,
             // restriction affixes) rides the passive gate.
             var bucket = !isPassive
                 ? triggered
                 : effect.IsBenefit ? benefits : passives;
-            // Dedup: two atoms with identical effect shapes collapse (the
-            // later one still validated the ledger, nothing is silently lost).
+            // Dedup: two atoms with identical effect shapes collapse into ONE
+            // fragment (the later one still validated the ledger, nothing is
+            // silently lost) - but their PROVENANCE is unioned, not
+            // overwritten. A last-write-wins survivor would make the fragment
+            // claim an arbitrary single origin: modify_max_energy is
+            // contributed by seven Ancient relics and gain_energy by two
+            // (GremlinHorn, Lantern), so a name derived from a survivor field
+            // would look sourced while actually being arbitrary. The name is
+            // the player-visible payoff of provenance, so provenance must be
+            // the whole set.
+            if (bucket.TryGetValue(effect.Key, out EffectFragment? existing))
+            {
+                effect = effect with { SourceAtoms = Union(existing.SourceAtoms, atom.Id) };
+            }
             bucket[effect.Key] = effect;
 
             if (!isPassive)
             {
                 string triggerKind = fix.Trigger ?? spec.Trigger!.Kind;
                 string condition = fix.Condition ?? spec.Condition?.Kind ?? "";
-                var fragment = new TriggerFragment(triggerKind, condition.Length == 0 ? null : condition, atom.Id);
+                var fragment = new TriggerFragment(triggerKind, condition.Length == 0 ? null : condition, new[] { atom.Id });
+                // Same union rule as the effects: `obtained` folds 15 atoms and
+                // `turn_start|first_turn` folds 4.
+                if (triggers.TryGetValue(fragment.Key, out TriggerFragment? existingTrigger))
+                {
+                    fragment = fragment with { SourceAtoms = Union(existingTrigger.SourceAtoms, atom.Id) };
+                }
                 triggers[fragment.Key] = fragment;
             }
         }
@@ -270,5 +288,18 @@ public sealed class RelicFragmentPool
             passives.Values.OrderBy(e => e.Key, StringComparer.Ordinal).ToArray(),
             benefits.Values.OrderBy(e => e.Key, StringComparer.Ordinal).ToArray(),
             supported);
+    }
+
+    /// <summary>
+    /// Union of a fragment's accumulated provenance and one new atom id.
+    /// Ordinal-sorted so the result is a pure function of the SET, never of
+    /// the ledger's array order - the pool is built once and its contents feed
+    /// the determinism contract, so an order-dependent list here would be an
+    /// order-dependent name downstream.
+    /// </summary>
+    private static IReadOnlyList<string> Union(IReadOnlyList<string> existing, string added)
+    {
+        var set = new SortedSet<string>(existing, StringComparer.Ordinal) { added };
+        return set.ToArray();
     }
 }

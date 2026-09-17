@@ -160,8 +160,15 @@ public static class RelicGenerator
     /// triggered) decided by one extra roll, and the passive opcode set
     /// widened - both change the RNG consumption shape, so the same seed
     /// would otherwise yield v4 relics while claiming to be v5.
+    /// v6: source-derived names (user order 2026-09-17). The name is no longer
+    /// drawn from the fragment stream - it is a pure function of the chosen
+    /// fragments, on its own "/name" stream. That is still an RNG-shape change
+    /// (the old code consumed two Next(24) draws per slot, and on the retry
+    /// path consumed them in a different order relative to fragment draws), so
+    /// the same reason as v4->v5 applies: a v5 save must regenerate rather
+    /// than be served relics whose names were composed under the old scheme.
     /// </summary>
-    public const string SeedVersion = "relics-v5";
+    public const string SeedVersion = "relics-v6";
 
     /// <summary>Chance a slot samples a second effect (both bound to the trigger).</summary>
     private const int TwoEffectChancePercent = 30;
@@ -388,9 +395,13 @@ public static class RelicGenerator
                 }
             }
 
-            var (adj, noun) = PickName(random, usedNames);
+            // Naming runs AFTER the fragments are final (it is a function of
+            // them) and on its OWN RNG stream, so it cannot perturb fragment
+            // sampling. The fragment stream above is untouched.
+            var nameRandom = new DeterministicRandom($"{ModId}/{SeedVersion}/{runSeed}/slot/{slot}/name");
+            var (nameEn, nameZhs) = PickName(nameRandom, trigger, effects, usedNames);
 
-            var definition = new GeneratedRelicDefinition(slot, rarity, adj, noun, trigger, effects);
+            var definition = new GeneratedRelicDefinition(slot, rarity, nameEn, nameZhs, trigger, effects);
 
             // Cross-run-content dedup: retry a few times so 60 slots stay
             // distinct; the fragment space is large enough that this virtually
@@ -425,13 +436,16 @@ public static class RelicGenerator
                         effects.Add(picked);
                     }
                 }
-                (adj, noun) = PickName(random, usedNames);
-                definition = new GeneratedRelicDefinition(slot, rarity, adj, noun, trigger, effects);
+                // The retry re-rolls the fragments, so the name must be
+                // re-derived from the NEW fragments. It draws from the retry's
+                // own "/name" stream for the same reason as above.
+                var retryNameRandom = new DeterministicRandom($"{ModId}/{SeedVersion}/{runSeed}/slot/{slot}/retry/{retries}/name");
+                var (retryEn, retryZhs) = PickName(retryNameRandom, trigger, effects, usedNames);
+                definition = new GeneratedRelicDefinition(slot, rarity, retryEn, retryZhs, trigger, effects);
                 retries++;
             }
 
             usedFingerprints.Add(definition.Fingerprint);
-            usedNames.Add(definition.NameEn);
             results.Add(definition);
         }
 
@@ -551,23 +565,166 @@ public static class RelicGenerator
         return chosen;
     }
 
-    private static (string en, string zhs) PickName(DeterministicRandom random, ISet<string> used)
+    /// <summary>
+    /// Derive the relic's name from the source relics its atoms came from.
+    ///
+    /// This is the AAR equivalent of the original Auto-Anthonyology's card-name
+    /// scheme (`ChaosCardGenerator.CardNameGenerator`). The original does NOT
+    /// name from the surviving source atom: `BuildSourcePool` builds a pool of
+    /// EVERY source recipe weighted by similarity to the generated card, then
+    /// samples TWO `NameParts` from it and composes their chunks
+    /// (`ComposeChinese` / `ComposeEnglish`). Two properties matter here:
+    ///  * the pool is over all recipes with a floor weight of 1 (`weight = 1 +
+    ///    ..`), so it is never exhausted and a second morpheme always exists;
+    ///  * a matching source can outweigh that floor by up to 2283:1, so the two
+    ///    sampled parts are drawn overwhelmingly from the sources the card was
+    ///    actually built from - which is what makes the origin visible to a
+    ///    reader. (Ratio derived from the formula's own bounds, not measured:
+    ///    DiceSimilarity is 200*|AB|/(|A|+|B|) <= 100 for identical sets.)
+    ///
+    /// The AAR analog: "similar to the generated card" becomes exact provenance
+    /// (which source relic contributed an atom), so the dominant pool is simply
+    /// the relic's own provenance set. The floor survives only to supply a second
+    /// morpheme for a relic whose fragments trace to a SINGLE source (a passive
+    /// relic, which has one fragment); such a relic still always gets its real
+    /// source as the stem, so the connection stays visible.
+    ///
+    /// PROVENANCE IS THE WHOLE SET, not a survivor field. Fragments fold by
+    /// effect shape (RelicFragmentPool.Build), so e.g. modify_max_energy has
+    /// seven contributing relics; naming from a last-write-wins `SourceAtom`
+    /// would produce a name that LOOKS sourced but is arbitrary.
+    ///
+    /// RNG: the caller gives this its OWN stream (a "/name" suffix), so naming
+    /// consumes nothing from the fragment stream and fragment sampling stays
+    /// byte-identical. Both the pool order and the weights are pure functions of
+    /// the fragment set, never of dictionary enumeration order.
+    /// </summary>
+    private static (string en, string zhs) PickName(
+        DeterministicRandom random,
+        TriggerFragment? trigger,
+        IReadOnlyList<EffectFragment> effects,
+        ISet<string> used)
     {
-        for (int attempt = 0; attempt < 16; attempt++)
+        // The relic's own provenance: every source relic that contributed an
+        // atom to the trigger or any effect. Ordinal-sorted, so the candidate
+        // order cannot depend on the ledger's array order.
+        var provenance = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (string atom in trigger?.SourceAtoms ?? Array.Empty<string>())
         {
-            int adj = random.Next(24);
-            int noun = random.Next(24);
-            string en = RelicText.NameEn(adj, noun);
-            if (used.Add(en))
+            provenance.Add(SourceOf(atom));
+        }
+        foreach (EffectFragment effect in effects)
+        {
+            foreach (string atom in effect.SourceAtoms)
             {
-                return (en, RelicText.NameZhs(adj, noun));
+                provenance.Add(SourceOf(atom));
             }
         }
-        // 24x24 space exhausted within a run (cannot happen at 60 slots);
-        // fall back to a suffixed unique name rather than looping forever.
-        string fallback = RelicText.NameEn(random.Next(24), random.Next(24)) + " " + used.Count;
-        used.Add(fallback);
-        return (fallback, RelicText.NameZhs(random.Next(24), random.Next(24)));
+        if (provenance.Count == 0)
+        {
+            throw new InvalidOperationException("generated relic has no source provenance to name from");
+        }
+
+        var stems = new List<string>(provenance);
+        // Stem: always a REAL origin, so the connection is visible in every
+        // generated name (the requirement) rather than only most of the time.
+        // Tail: drawn from the full source pool, provenance-weighted, exactly as
+        // the original samples its second NameParts from a pool whose matching
+        // sources dominate a floor of 1. The floor is what keeps the pair space
+        // large enough to stay unique when several relics in one run share the
+        // same provenance set (the probe asserts 60 distinct names per run).
+        var tailPool = new List<(string Source, int Weight)>(RelicText.AllSources.Count);
+        long totalTailWeight = 0;
+        foreach (string source in RelicText.AllSources)
+        {
+            int weight = provenance.Contains(source) ? ProvenanceWeight : 1;
+            tailPool.Add((source, weight));
+            totalTailWeight += weight;
+        }
+
+        for (int attempt = 0; attempt < 64; attempt++)
+        {
+            string stem = stems[random.Next(stems.Count)];
+            string tail = WeightedSource(random, tailPool, totalTailWeight);
+            if (string.Equals(stem, tail, StringComparison.Ordinal))
+            {
+                continue; // would read "Gremlin Gremlin"
+            }
+            RelicText.NameMorpheme stemMorpheme = RelicText.Morpheme(stem);
+            RelicText.NameMorpheme tailMorpheme = RelicText.Morpheme(tail);
+            string en = RelicText.ComposeEn(stemMorpheme.En, tailMorpheme.En);
+            string zhs = RelicText.ComposeZhs(stemMorpheme.Zhs, tailMorpheme.Zhs);
+            if (used.Add(NameKey(en, zhs)))
+            {
+                return (en, zhs);
+            }
+        }
+
+        // Deterministic sweep: the weighted draws are probabilistic, so a
+        // collision-free pair must stay reachable when they keep colliding.
+        foreach (string stem in stems)
+        {
+            foreach ((string tail, int _) in tailPool)
+            {
+                if (string.Equals(stem, tail, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                RelicText.NameMorpheme stemMorpheme = RelicText.Morpheme(stem);
+                RelicText.NameMorpheme tailMorpheme = RelicText.Morpheme(tail);
+                string en = RelicText.ComposeEn(stemMorpheme.En, tailMorpheme.En);
+                string zhs = RelicText.ComposeZhs(stemMorpheme.Zhs, tailMorpheme.Zhs);
+                if (used.Add(NameKey(en, zhs)))
+                {
+                    return (en, zhs);
+                }
+            }
+        }
+
+        // Unreachable: at least 45 x 44 = 1980 distinct names against 60 slots.
+        throw new InvalidOperationException(
+            $"name space exhausted after {used.Count} names; {RelicText.AllSources.Count} morphemes are not enough for {SlotCount} slots");
+    }
+
+    /// <summary>
+    /// Dedup key for a composed name. Both languages participate: the probe
+    /// asserts English uniqueness, and a ZHS collision with distinct English
+    /// (were the tables ever to hold a duplicate morpheme) would still show two
+    /// identically-named relics to a Chinese player.
+    /// </summary>
+    private static string NameKey(string en, string zhs) => en + "\u0000" + zhs;
+
+    /// <summary>One weighted draw (cumulative weights, as the original's WeightedNameSourcePool.Sample).</summary>
+    private static string WeightedSource(DeterministicRandom random, IReadOnlyList<(string Source, int Weight)> pool, long totalWeight)
+    {
+        long roll = random.Next((int)Math.Min(totalWeight, int.MaxValue));
+        long accumulated = 0;
+        foreach ((string source, int weight) in pool)
+        {
+            accumulated += weight;
+            if (roll < accumulated)
+            {
+                return source;
+            }
+        }
+        return pool[^1].Source;
+    }
+
+    /// <summary>
+    /// Weight of a source relic that actually contributed an atom to this relic.
+    /// The original lets a matching source dominate the floor by up to 2283:1
+    /// (`weight = 1 + (dice*1000 + dice)/50 + primary*80 + sameTypeSameCost*30 +
+    /// sameType*10`, with DiceSimilarity topping out at 100 for identical sets);
+    /// here the match is exact provenance rather than a similarity score, so one
+    /// strong weight captures the same intent.
+    /// </summary>
+    private const int ProvenanceWeight = 64;
+
+    /// <summary>The source relic of an atom id (<c>Akabeko#AfterSideTurnStart#0</c>).</summary>
+    private static string SourceOf(string atomId)
+    {
+        int hash = atomId.IndexOf('#');
+        return hash < 0 ? atomId : atomId[..hash];
     }
 
     private static T? PickUniquely<T>(
