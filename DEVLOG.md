@@ -30,8 +30,15 @@
 
 `tools/relic-eligibility-probe`(引擎外, 直接引用构建产物):
 
-- 配对空间 11 trigger x 12 effect = 132; 旧规则放行 121 对, 其中 18 对会被执行器跳过;
-  新规则放行 103 对, 0 对会被跳过.
+- 规则覆盖(探针 `tools/relic-eligibility-probe` 输出): 池 15 trigger 片段(12 Kind)x 31 effect 片段
+  (13 opcode / 21 shape), 2 passive; 规则 (a) 排除 2x8=16, 规则 (b) 排除 2x2=4(4 条不被 (a) 覆盖);
+  合计 71 of 252(Kind x shape)/ 26 of 156(Kind x opcode).
+- 200-seed 扫描: 每个 effect 与 trigger 片段仍可达; 同 seed 逐字节一致.
+- **实机核对(2026-09-17, `I:\Slay the Spire 2` Goldberg 副本, 0.1.6)**: 启动行 `15 triggers,
+  31 triggered effects, 2 passives` 与探针逐字一致; 真实对局中遗物生成走 `obtained` 路径无异常.
+- 初版提交写的 132/121/18/103 是错的: 用了过期的 `research/relic_atom_ledger.json`(25 supported)
+  而非运行时 `mod/Code/Data/Json/relic_atom_ledger.json`(36 supported), 且漏算 `EffectFragment.Key`
+  的 Values 分量. 已按探针与实机日志更正.
 - 每个 effect 片段仍至少有 1 个合法 trigger; 200 seed 扫描下每个 effect 与 trigger 片段都可达.
 - 同 seed 生成结果指纹稳定.
 - 明确声明: 上述规则由反编译与执行器源码推导, **没有实机验证**.

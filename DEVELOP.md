@@ -60,8 +60,8 @@
 
 ```bash
 # 本 Bash 沙箱缺 APPDATA/PROGRAMDATA/ProgramFiles*, 必须用包装器
-python "G:/omp works/AutoAnthonyRelics/.tmp/dotnet-env.py" \
-       "G:/omp works/sts2-autoanthony-relics/mod" \
+python "G:/omp works/Sts/AutoAnthonyRelics/.tmp/dotnet-env.py" \
+       "G:/omp works/Sts/sts2-autoanthony-relics/mod" \
        build AutoAnthonyRelics.csproj -c Debug --nologo -v m
 ```
 
@@ -71,7 +71,7 @@ python "G:/omp works/AutoAnthonyRelics/.tmp/dotnet-env.py" \
 ## 隔离探针
 
 ```bash
-python "G:/omp works/AutoAnthonyRelics/.tmp/dotnet-env.py" \
+python "G:/omp works/Sts/AutoAnthonyRelics/.tmp/dotnet-env.py" \
        "G:/omp works/.tmp/aar-step4-probe" \
        run --project Probe.csproj -c Debug --nologo -v q
 ```
@@ -110,13 +110,20 @@ python "G:/omp works/AutoAnthonyRelics/.tmp/dotnet-env.py" \
 `CombatScopedOpcodes` 单一定义在 `EffectFragment` 上, 生成器与执行器共用, 避免两边漂移
 (这正是本条目描述的缺陷).
 
-配对空间实测: 池内 11 个 trigger 片段 x 12 个 effect 片段 = 132 对; 旧规则放行 121 对, 其中
-**18 对**执行器会静默跳过(obtained/gold_gained x 8 个战斗域效果, 加上 combat_end/
-combat_victory x deal_damage); 新规则放行 103 对, 其中 0 对会被跳过. 每个 effect 片段仍至少
-有 1 个合法 trigger(最少的是 `gain_max_hp`, 只剩 `obtained`).
+规则覆盖(权威来源 = 探针 `tools/relic-eligibility-probe` 的 `---- pool` 与 `---- rule (a)/(b) reach`
+两段; 2026-09-17 与实机启动日志 `15 triggers, 31 triggered effects, 2 passives` 逐字一致):
+
+- 池: 15 个 trigger 片段(12 个 distinct Kind)x 31 个 triggered effect 片段(13 个 opcode / 21 个 shape),
+  2 个 passive 片段; 其中战斗域 shape 8 个, `all_enemies` shape 2 个.
+- 规则 (a) 排除: 2 个无战斗上下文 trigger x 8 个战斗域 shape = 16(Kind x shape).
+- 规则 (b) 排除: 2 个敌人全死 trigger x 2 个 `all_enemies` shape = 4, 其中 4 条不被 (a) 覆盖.
+- 合计排除: 71 of 252(Kind x shape)/ 26 of 156(Kind x opcode).
+  opcode 粒度比规则粗 -- `apply_power` 的 `all_enemies` 变体在 dead-enemy trigger 下非法, 但其 self
+  变体合法, 因此 Kind x opcode 计数无法精确表达该规则, 以 shape 计数为准.
+- 200-seed 扫描: 每个 effect 片段与 trigger 片段仍可达; 同 seed 结果逐字节一致.
 
 权重、点数预算(负面 140 / 普通 100)、候选顺序与 RNG 抽取序列均未改变; 规则只做配对排除.
 
 ## 进度
 
-见 `DEVLOG.md`。当前: 阶段 A (骨架 + 数据层) 完成。
+见 `DEVLOG.md`.当前: 阶段 A (骨架 + 数据层) 完成.
