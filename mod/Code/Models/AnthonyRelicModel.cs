@@ -19,6 +19,7 @@ using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Enchantments;
 using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.ValueProps;
@@ -705,11 +706,31 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         }
     }
 
-    private static bool AnyCardsPlayedThisTurn(Player owner) =>
-        CombatManager.Instance.History.CardPlaysFinished.Any(e =>
+    /// <summary>
+    /// Whether the owner has played a card this turn (Pael's Eye
+    /// AnyCardsPlayedThisTurn).
+    ///
+    /// The history half excludes auto-plays exactly as the engine does. That
+    /// exclusion is why the WhisperingEarring clause exists: that relic
+    /// auto-plays up to 13 cards on turn 1 (WhisperingEarring.cs
+    /// AfterAutoPrePlayPhaseEnteredLate -> CardCmd.AutoPlay), and every one of
+    /// them is IsAutoPlay, so the history check cannot see them. Without the
+    /// clause an extra_turn relic plus WhisperingEarring would hand out a free
+    /// extra turn on turn 1 that the engine relic refuses.
+    /// </summary>
+    private static bool AnyCardsPlayedThisTurn(Player owner)
+    {
+        var state = owner.PlayerCombatState;
+        if (state is not null && state.TurnNumber == 1
+            && owner.Relics.Any(r => r is WhisperingEarring))
+        {
+            return true;
+        }
+        return CombatManager.Instance.History.CardPlaysFinished.Any(e =>
             e.Actor == owner.Creature
             && e.HappenedThisTurn(owner.Creature.CombatState)
             && !e.CardPlay.IsAutoPlay);
+    }
 
     /// <summary>Latches the extra turn for this combat (Pael's Eye UsedThisCombat).</summary>
     public override Task AfterTakingExtraTurn(Player player)
