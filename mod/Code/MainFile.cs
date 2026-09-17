@@ -1,6 +1,8 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using AutoAnthonyRelics.Generation;
+using AutoAnthonyRelics.Patches;
 using BaseLib.Config;
 using Godot;
 using HarmonyLib;
@@ -62,6 +64,45 @@ public partial class MainFile : Node
                 }
             }
             Logger.Info($"[{ModId}] Harmony: {patchedClasses} patch class(es) applied, {failedClasses} failed");
+
+            // Bag-patch target self-check. Harmony's CreateClassProcessor().Patch() does NOT fail
+            // when a [HarmonyPatch] class's TargetMethod() returns null - it silently patches
+            // nothing. That is how a renamed engine type degrades this feature into a no-op with a
+            // green "8 patch class(es) applied" line. Resolve the target explicitly so the log says
+            // whether vanilla-relic stripping is actually armed, and say WHICH overloads were found.
+            try
+            {
+                var bagType = AccessTools.TypeByName(AnthonyRelicPoolReplacement.BagTypeName);
+                if (bagType == null)
+                {
+                    Logger.Error($"[{ModId}] vanilla-relic replacement is DISARMED: type " +
+                                 $"'{AnthonyRelicPoolReplacement.BagTypeName}' not found (engine renamed it?)");
+                }
+                else
+                {
+                    var populates = bagType.GetMethods()
+                        .Where(m => m.Name == "Populate")
+                        .Select(m => string.Join(",", m.GetParameters().Select(p => p.ParameterType.Name)))
+                        .ToList();
+                    var loads = bagType.GetMethods()
+                        .Where(m => m.Name == "LoadFromSerializable")
+                        .Select(m => string.Join(",", m.GetParameters().Select(p => p.ParameterType.Name)))
+                        .ToList();
+                    Logger.Info($"[{ModId}] vanilla-relic replacement armed: {bagType.FullName} " +
+                                $"Populate overloads = [{string.Join(" | ", populates)}], " +
+                                $"LoadFromSerializable = [{string.Join(" | ", loads)}], " +
+                                $"replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics}");
+                    if (loads.Count == 0)
+                    {
+                        Logger.Error($"[{ModId}] continued runs will NOT be stripped: no " +
+                                     $"LoadFromSerializable on {bagType.FullName}");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Error($"[{ModId}] bag target self-check failed: {e.Message}");
+            }
 
             // Relic data: atoms (extractor candidates) + ledger (hand-audited
             // verdicts) -> independent trigger/effect fragment pools.

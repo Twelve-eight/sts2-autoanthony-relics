@@ -143,3 +143,38 @@ internal static class AnthonyRelicPoolReplacementEnumerablePatch
         AnthonyRelicPoolReplacement.Apply(__instance, null);
     }
 }
+
+/// <summary>
+/// Postfix for LoadFromSerializable - the path a CONTINUED run takes.
+///
+/// Populate only runs at run start, so a save created while the strip was OFF (or before this mod
+/// was installed) keeps its vanilla relics: LoadFromSerializable restores _deques verbatim from
+/// RelicIdLists, IsPopulated then reads true, and PopulateIfNecessary short-circuits on that.
+/// Without this patch "replace vanilla relics" silently does nothing for such a run - the user
+/// keeps seeing vanilla relics in rewards with the toggle on. Measured on a real save: 87 bag
+/// entries, 0 of them generated.
+///
+/// In singleplayer the player's bag IS the shared bag (assigned in the Player ctor), so patching
+/// this one instance method covers all three load sites: RunState.FromSerializable (shared bag),
+/// Player.FromSerializable (player bag), and CombatStateSynchronizer (MP client resync).
+///
+/// _originalRelics is deliberately NOT restored: it is never serialized, stays null, and its only
+/// reader RefreshRarity is unreachable on a loaded bag because FromSerializable uses the
+/// parameterless ctor, which leaves _refreshAllowed false. Apply() guards that field with an
+/// `is List<RelicModel>` pattern that fails on null, so the null is already handled.
+/// </summary>
+[HarmonyPatch]
+internal static class AnthonyRelicPoolReplacementLoadPatch
+{
+    private static MethodBase? TargetMethod()
+    {
+        var bagType = AccessTools.TypeByName(AnthonyRelicPoolReplacement.BagTypeName);
+        return bagType?.GetMethods()
+            .FirstOrDefault(m => m.Name == "LoadFromSerializable" && m.GetParameters().Length == 1);
+    }
+
+    private static void Postfix(object __instance)
+    {
+        AnthonyRelicPoolReplacement.Apply(__instance, null);
+    }
+}
