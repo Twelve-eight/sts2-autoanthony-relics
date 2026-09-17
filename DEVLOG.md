@@ -972,3 +972,60 @@ trigger/效果没有任何关系. 用户要求: 名字必须能让人**看出**�
 - 未实机验证(需用户启动游戏看遗物名); 词素表覆盖的是账本 47 条 supported 原子涉及的 45 个来源,
   若账本将来纳入新来源, `RelicText.Morpheme` 会**抛异常**提示补表, 而不是静默降级.
 - `Glam` 等无权威 zhs 译名者沿用英文, 与既有约定一致(见 v5 条目).
+
+---
+
+## 2026-09-17 "替换原版遗物"选项: 补上读档路径 + 让补丁可观测
+
+### 背景
+用户问"有没有禁止原版遗物生成的选项". **有**: `AutoAnthonyRelicsConfig.ReplaceVanillaRelics`
+(设置里 "替换原版遗物", 默认开), Harmony Postfix 打在引擎遗物袋 `Populate` 上, 剥离所有非
+`CustomRelicModel` 的条目(`_deques` 与 `_originalRelics` 都剥, 后者防止稀有度队列耗尽时
+`RefreshRarity` 把原版塞回).
+
+### 修的两个真问题
+
+**(1) 读档进入的局不会被剥离.** `Populate` 只在开局跑一次; `LoadFromSerializable` 从
+`RelicIdLists` **原样还原** `_deques`, 之后 `IsPopulated` 为 true, `PopulateIfNecessary` 直接
+短路. 所以"开关关闭时创建的存档"(或装本 mod 之前开的档)读进来后袋里仍是原版遗物, 开关开着
+也看不到效果. 实测该档: 87 个袋条目, **0 个**是生成的.
+修法: 给 `LoadFromSerializable` 加同款 Postfix. 单机下玩家的袋**就是**共享袋(Player ctor 里
+`relic-bag = shared relic-bag`), 所以这一个实例方法覆盖全部三个读档点 --
+`RunState.FromSerializable`(共享袋), `Player.FromSerializable`(玩家袋),
+`CombatStateSynchronizer`(MP 客户端重同步).
+`_originalRelics` **有意不还原**: 它从不被序列化, 读档后为 null, 其唯一读者 `RefreshRarity` 在
+读档袋上不可达(`FromSerializable` 用无参 ctor, `_refreshAllowed` 保持 false). `Apply()` 里读该
+字段用的是 `is List<RelicModel>` 模式匹配, null 天然落到 else 分支, 已正确处理.
+
+**(2) 这个功能原本不可观测.** Harmony 的 `CreateClassProcessor().Patch()` 在
+`TargetMethod()` 返回 null 时**不报错** -- 它什么都不补, 却照样计入 "applied". 所以引擎一旦改
+类型名, 本功能会静默退化成空操作, 而日志仍显示绿色的 "N patch class(es) applied". 另一条日志
+(移除计数)只在 `Populate` Postfix 内部打印, 而只到主菜单的会话根本不会触发它 -- 这就是为什么
+5 个历史日志里 `pool replacement` 都是 0 次, 那个 0 **不能**证明补丁坏了.
+修法: 启动时显式解析袋类型, 打印每个 `Populate` 与 `LoadFromSerializable` 重载, 并在
+`LoadFromSerializable` 缺失时**报错**.
+
+### 实机验证
+```
+[AutoAnthonyRelics] Harmony: 9 patch class(es) applied, 0 failed      (原 8)
+[AutoAnthonyRelics] vanilla-relic replacement armed: MegaCrit.Sts2.Core.Runs.relic-bag
+   Populate overloads = [Player,Rng | IEnumerable`1,Rng],
+   LoadFromSerializable = [Serializable relic-bag], replaceVanilla=True
+```
+0 崩溃. 启动期无 AAR 错误.
+
+### 未验证(诚实标注)
+**剥离动作本身未实机验证** -- 引擎没有任何控制台命令能开局(`win`/`room`/`travel`/`act` 都要求
+局面已存在, `RunManager` 的开局入口是 `SetUpNewMultiplayer` 无 console 前置). 要看到
+`pool replacement: removed N relics` 必须真实开一局.
+
+### 排查中犯的错误(已撤回, 教训留档)
+1. **误判"类型名不匹配"**: 比较 AAR 拼接的 `BagTypeName` 与引擎类名时, 两边都被
+   `.omp/hooks/pre/strip-illegal.ts` 规则 7 重写(`relic-bag` -> `relic-bag`), 于是看起来不同.
+   实际字符串**完全一致**(码点核对: 0x52 0x65 0x6c 0x69 0x63 0x47 0x72 0x61 0x62 0x42 0x61 0x67
+   = `relic-bag`). **教训: 该仓库里含 `relic`+`grab` 的标识符在工具输出中一律被重写, 比较字符串
+   必须用码点或绕开 hook 读取.**
+2. **误判"读档是缺口所以补丁坏了"**: 机制分析对(读档确实绕过 Populate), 但我起初把它当成
+   "补丁失效"的证据. 它只是**范围**问题, 不是功能不存在. 且存档里 87 个原版遗物是**旧档**的
+   状态快照, 不能用来判断当前选项是否生效.
+3. **误从"日志 0 次"推断补丁未触发**: 见上文 (2).
