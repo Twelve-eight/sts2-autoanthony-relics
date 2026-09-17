@@ -34,10 +34,12 @@ public sealed record EffectFragment(
     private string ValuesKey => string.Join(",", Values.Select(v => $"{v.Id}:{v.Value}"));
 
     /// <summary>
-    /// Downside opcodes (downside pool, user order 2026-09-15): effects that
-    /// hurt the owner. The generator weighs these fragments 1.4x so they
-    /// appear 40% more often than uniform sampling would place them. add_curse
-    /// fragments differ per curse via Variant, so Key/ShapeKey stay distinct.
+    /// Downside opcodes (downside pool, user order 2026-09-15): triggered
+    /// effects that hurt the owner. Sampling is UNIFORM as of the 2026-09-17
+    /// order, which cancelled the 1.4x weight these fragments used to carry -
+    /// the set now documents polarity (probe assertions, text) and no longer
+    /// changes any draw. add_curse fragments differ per curse via Variant, so
+    /// Key/ShapeKey stay distinct.
     /// </summary>
     public static readonly HashSet<string> DownsideOpcodes = new(StringComparer.Ordinal)
     {
@@ -45,6 +47,46 @@ public sealed record EffectFragment(
     };
 
     public bool IsDownside => DownsideOpcodes.Contains(Opcode);
+
+    /// <summary>
+    /// Restriction opcodes (user order 2026-09-17): Ancient relics whose effect
+    /// is a veto or a penalty the engine applies through a named query hook
+    /// rather than a command. They are passive (trigger-less), so they can only
+    /// reach a relic through the passive slot.
+    ///
+    /// Each one ships in the engine paired with an offsetting benefit
+    /// (RelicGenerator.RestrictionOffsets); a restriction affix is never
+    /// generated without its offset, because the engine itself never ships a
+    /// bare restriction and a pure-cost relic the player is forced to pick up
+    /// would be a design defect, not a downside.
+    /// </summary>
+    public static readonly HashSet<string> RestrictionOpcodes = new(StringComparer.Ordinal)
+    {
+        "restrict_gold", "restrict_potion", "restrict_card_play",
+        "restrict_draw", "modify_card_cost", "enemy_strength_gain",
+    };
+
+    public bool IsRestriction => RestrictionOpcodes.Contains(Opcode);
+
+    /// <summary>
+    /// Benefit opcodes: the Ancient relics' strictly-beneficial passives. The
+    /// generator gates these behind its own 5% roll (user order 2026-09-17),
+    /// separate from the 15% passive-relic roll, so a strictly-good passive
+    /// stays rare.
+    ///
+    /// modify_hand_draw is deliberately NOT listed even when its amount is
+    /// positive. The order scopes the 5% rate to the Ancient relics' benefits;
+    /// BagOfPreparation (+2, a vanilla Common) already sits in the passive
+    /// band, and folding it in here would silently move existing pool content
+    /// to a different rate. Its polarity is per-fragment (sign), not per-opcode.
+    /// </summary>
+    public static readonly HashSet<string> BenefitOpcodes = new(StringComparer.Ordinal)
+    {
+        "modify_max_energy", "retain_hand", "extra_turn",
+        "expand_card_pool", "enchant_reward",
+    };
+
+    public bool IsBenefit => BenefitOpcodes.Contains(Opcode);
 
     /// <summary>
     /// Opcodes whose engine command needs a live combat context (energy /
@@ -93,11 +135,26 @@ public sealed class RelicFragmentPool
         Array.Empty<TriggerFragment>(),
         Array.Empty<EffectFragment>(),
         Array.Empty<EffectFragment>(),
+        Array.Empty<EffectFragment>(),
         0);
 
     public IReadOnlyList<TriggerFragment> Triggers { get; }
     public IReadOnlyList<EffectFragment> TriggeredEffects { get; }
+    /// <summary>
+    /// Passives that are NOT strict benefits: the hand-draw modifiers (either
+    /// sign) and the restriction affixes. These are what the passive slot
+    /// samples at PassiveRelicChancePercent.
+    /// </summary>
     public IReadOnlyList<EffectFragment> PassiveEffects { get; }
+    /// <summary>
+    /// Strictly-beneficial passives (EffectFragment.IsBenefit). Split out of
+    /// PassiveEffects because they are gated by their own, much smaller roll
+    /// (RelicGenerator.BenefitRelicChancePercent, user order 2026-09-17): left
+    /// in the passive pool they would appear at the passive rate, and the
+    /// passive draw is uniform (it does not consult WeightOf), so a weight
+    /// could not hold them back.
+    /// </summary>
+    public IReadOnlyList<EffectFragment> BenefitEffects { get; }
     public int SupportedAtomCount { get; }
 
     /// <summary>Stable fingerprint of the fragment pool contents (cache-key input).</summary>
@@ -106,16 +163,19 @@ public sealed class RelicFragmentPool
     private RelicFragmentPool(IReadOnlyList<TriggerFragment> triggers,
         IReadOnlyList<EffectFragment> triggeredEffects,
         IReadOnlyList<EffectFragment> passiveEffects,
+        IReadOnlyList<EffectFragment> benefitEffects,
         int supportedAtomCount)
     {
         Triggers = triggers;
         TriggeredEffects = triggeredEffects;
         PassiveEffects = passiveEffects;
+        BenefitEffects = benefitEffects;
         SupportedAtomCount = supportedAtomCount;
         var sb = new System.Text.StringBuilder();
         foreach (var t in triggers) sb.Append('T').Append(t.Key).Append(';');
         foreach (var e in triggeredEffects) sb.Append('E').Append(e.Key).Append(';');
         foreach (var e in passiveEffects) sb.Append('P').Append(e.Key).Append(';');
+        foreach (var e in benefitEffects) sb.Append('B').Append(e.Key).Append(';');
         Fingerprint = System.Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(sb.ToString())))[..16];
     }
@@ -136,6 +196,7 @@ public sealed class RelicFragmentPool
         var triggers = new Dictionary<string, TriggerFragment>(StringComparer.Ordinal);
         var triggered = new Dictionary<string, EffectFragment>(StringComparer.Ordinal);
         var passives = new Dictionary<string, EffectFragment>(StringComparer.Ordinal);
+        var benefits = new Dictionary<string, EffectFragment>(StringComparer.Ordinal);
         int supported = 0;
 
         foreach (LedgerEntry entry in ledger.Supported)
@@ -184,7 +245,12 @@ public sealed class RelicFragmentPool
                 ? (fix.Condition ?? spec.Condition?.Kind)
                 : null;
             var effect = new EffectFragment(opcode, variant, target, values, isPassive, atom.Id, effectCondition);
-            var bucket = isPassive ? passives : triggered;
+            // Passive fragments split by polarity: strict benefits ride their
+            // own 5% gate, everything else (hand-draw modifiers either sign,
+            // restriction affixes) rides the passive gate.
+            var bucket = !isPassive
+                ? triggered
+                : effect.IsBenefit ? benefits : passives;
             // Dedup: two atoms with identical effect shapes collapse (the
             // later one still validated the ledger, nothing is silently lost).
             bucket[effect.Key] = effect;
@@ -202,6 +268,7 @@ public sealed class RelicFragmentPool
             triggers.Values.OrderBy(t => t.Key, StringComparer.Ordinal).ToArray(),
             triggered.Values.OrderBy(e => e.Key, StringComparer.Ordinal).ToArray(),
             passives.Values.OrderBy(e => e.Key, StringComparer.Ordinal).ToArray(),
+            benefits.Values.OrderBy(e => e.Key, StringComparer.Ordinal).ToArray(),
             supported);
     }
 }

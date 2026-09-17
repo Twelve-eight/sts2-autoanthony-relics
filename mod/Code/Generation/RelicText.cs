@@ -95,6 +95,22 @@ public static class RelicText
                 $"draw {amount} additional card{(amount == 1 ? "" : "s")} on turn 1 of each combat",
             ("modify_hand_draw", _, "self") =>
                 $"draw {-amount} fewer card{(amount == -1 ? "" : "s")} on turn 1 of each combat",
+            // Ancient restriction / benefit affixes (user order 2026-09-17).
+            // Restrictions always ship with their engine offset (see
+            // RelicGenerator.RestrictionOffsets), which is a separate fragment
+            // and therefore a separate list item.
+            ("modify_max_energy", _, "self") => $"gain {amount} additional Energy",
+            ("restrict_gold", _, "self") => "you can no longer gain Gold",
+            ("restrict_potion", _, "self") => "you can no longer obtain potions",
+            ("restrict_card_play", _, "self") =>
+                $"you cannot play more than {amount} card{(amount == 1 ? "" : "s")} each turn",
+            ("restrict_draw", _, "self") => "card effects no longer draw cards for you",
+            ("modify_card_cost", _, "self") => "Power cards cost 1 more",
+            ("enemy_strength_gain", _, "self") => $"enemies gain {amount} Strength when they enter combat",
+            ("retain_hand", _, "self") => "you no longer discard your hand at the end of your turn",
+            ("extra_turn", _, "self") => "take an extra turn if you play no cards",
+            ("expand_card_pool", _, "self") => "card rewards may contain cards from any character",
+            ("enchant_reward", _, "self") => "card rewards are enchanted with Glam",
             _ => throw new InvalidOperationException($"no EN text for effect {effect.Opcode}/{effect.Variant}/{effect.Target}"),
         };
     }
@@ -125,6 +141,17 @@ public static class RelicText
             ("add_curse", _, _) => "将1张诅咒牌加入你的牌堆",
             ("modify_hand_draw", _, "self") when amount >= 0 => $"每场战斗第1回合额外抽{amount}张牌",
             ("modify_hand_draw", _, "self") => $"每场战斗第1回合少抽{-amount}张牌",
+            ("modify_max_energy", _, "self") => $"额外获得{amount}点能量",
+            ("restrict_gold", _, "self") => "你不再能获得金币",
+            ("restrict_potion", _, "self") => "你不再能获得药水",
+            ("restrict_card_play", _, "self") => $"每回合最多打出{amount}张牌",
+            ("restrict_draw", _, "self") => "卡牌效果不再为你抽牌",
+            ("modify_card_cost", _, "self") => "能力牌的费用提高1点",
+            ("enemy_strength_gain", _, "self") => $"敌人进入战斗时获得{amount}点力量",
+            ("retain_hand", _, "self") => "回合结束时不再弃掉你的手牌",
+            ("extra_turn", _, "self") => "若你本回合未打出卡牌,则获得一个额外回合",
+            ("expand_card_pool", _, "self") => "卡牌奖励可能包含任意角色的卡牌",
+            ("enchant_reward", _, "self") => "卡牌奖励会被附上Glam",
             _ => throw new InvalidOperationException($"no ZHS text for effect {effect.Opcode}/{effect.Variant}/{effect.Target}"),
         };
     }

@@ -72,7 +72,9 @@ public partial class MainFile : Node
                         $"{ledger.Supported.Count} ledger-supported, {ledger.Rejected.Count} ledger-rejected; " +
                         $"fragments: {FragmentPool.Triggers.Count} triggers, " +
                         $"{FragmentPool.TriggeredEffects.Count} triggered effects, " +
-                        $"{FragmentPool.PassiveEffects.Count} passives");
+                        $"{FragmentPool.PassiveEffects.Count} passives, " +
+                        $"{FragmentPool.BenefitEffects.Count} benefits; " +
+                        $"restrictions: {FragmentPool.PassiveEffects.Count(e => e.IsRestriction)}");
 
             Logger.Info($"[{ModId}] initialized: enabled={AutoAnthonyRelicsConfig.Enabled}, " +
                         $"replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics}");

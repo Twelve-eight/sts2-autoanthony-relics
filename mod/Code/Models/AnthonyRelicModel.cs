@@ -17,6 +17,7 @@ using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Enchantments;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -243,6 +244,18 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         // Fuse (L21): awaited by the engine's turn loop.
         try
         {
+            // Extra-turn affix bookkeeping (Pael's Eye AfterSideTurnStart),
+            // BEFORE any early return: extra_turn is a passive affix, so a
+            // trigger-only path would never reach this and the flag would stay
+            // at its initializer forever. Mirrors the engine, which records the
+            // flag for the owner's side only and only while unused; a player
+            // forced to skip (absent from participants) is recorded as NOT
+            // having taken the last player turn, so they cannot claim the extra
+            // turn on a turn they never played.
+            if (side == Owner.Creature.Side && !_extraTurnUsedThisCombat)
+            {
+                _wasOwnerPartOfLastPlayerTurn = participants.Contains(Owner.Creature);
+            }
             var (owner, trigger, effects) = Resolve("turn_start");
             if (owner is null || effects is null)
             {
@@ -307,6 +320,14 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         {
             return;
         }
+        // Enemy-strength affix, combat-start half. PhilosophersStone applies
+        // Strength from BOTH AfterRoomEntered (the combat-start roster) and
+        // AfterCreatureAddedToCombat (creatures added mid-combat); the latter's
+        // only caller requires an in-progress combat, so on its own it would
+        // never fire in a normal fight while the relic text promises it does.
+        // Use Owner, not the Resolve result: enemy_strength_gain is passive
+        // (no trigger), so Resolve returns null and this call would no-op.
+        await ApplyEnemyStrengthAsync(Owner);
         var (owner, trigger, effects) = Resolve("room_entered");
         if (owner is null || effects is null)
         {
@@ -415,6 +436,11 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     public override async Task AfterCombatEnd(CombatRoom room)
     {
         var (owner, trigger, effects) = Resolve("combat_end");
+        // Per-combat latches reset here (Pael's Eye clears UsedThisCombat in
+        // AfterCombatEnd); leaving them set would silently disable the affix
+        // for the rest of the run.
+        _extraTurnUsedThisCombat = false;
+        _wasOwnerPartOfLastPlayerTurn = true;
         lock (DebuffGate)
         {
             PendingEnemyDebuffs.Clear();
@@ -448,6 +474,34 @@ public abstract class AnthonyRelicModel : CustomRelicModel
 
     // ---------- Passive modifiers ----------
 
+    /// <summary>
+    /// Passive fragments of THIS relic with the given opcode.
+    ///
+    /// Every passive override below goes through this, so a passive opcode is
+    /// handled uniformly: the generator's PassiveOpcodes set and this file's
+    /// overrides are two halves of one contract, and a fragment whose opcode is
+    /// in neither simply never reaches a relic.
+    /// </summary>
+    private IEnumerable<EffectFragment> PassivesWith(string opcode)
+    {
+        var definition = Definition;
+        if (definition is null)
+        {
+            yield break;
+        }
+        foreach (EffectFragment effect in definition.Effects)
+        {
+            if (effect.IsPassive
+                && string.Equals(effect.Opcode, opcode, StringComparison.Ordinal)
+                && MatchesCondition(effect.Condition, Owner!))
+            {
+                yield return effect;
+            }
+        }
+    }
+
+    private bool HasPassive(string opcode) => PassivesWith(opcode).Any();
+
     public override decimal ModifyHandDraw(Player player, decimal count)
     {
         var owner = Owner;
@@ -455,25 +509,321 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         {
             return count;
         }
-        var definition = Definition;
-        if (definition is null)
+        foreach (EffectFragment effect in PassivesWith("modify_hand_draw"))
         {
-            return count;
-        }
-        foreach (EffectFragment effect in definition.Effects)
-        {
-            if (effect.Opcode != "modify_hand_draw")
-            {
-                continue;
-            }
-            if (!MatchesCondition(effect.Condition, owner))
-            {
-                continue;
-            }
             count += effect.Amount;
         }
         // Floor 1: a 0-card opening hand would brick the run.
         return Math.Max(1m, count);
+    }
+
+    /// <summary>Maximum energy (Ancient +1-energy affix family: BlessedAntler,
+    /// BloodSoakedRose, Ectoplasm, PhilosophersStone, Sozu, SpikedGauntlets,
+    /// VelvetChoker, WhisperingEarring, ...).</summary>
+    public override decimal ModifyMaxEnergy(Player player, decimal amount)
+    {
+        var owner = Owner;
+        if (owner is null || player != owner)
+        {
+            return amount;
+        }
+        foreach (EffectFragment effect in PassivesWith("modify_max_energy"))
+        {
+            amount += effect.Amount;
+        }
+        return amount;
+    }
+
+    /// <summary>Restriction: gold gains become 0 (Ectoplasm).</summary>
+    public override decimal ModifyGoldGained(Player player, decimal amount)
+    {
+        var owner = Owner;
+        if (owner is null || player != owner || !HasPassive("restrict_gold"))
+        {
+            return amount;
+        }
+        return 0m;
+    }
+
+    /// <summary>Restriction: the owner cannot obtain potions (Sozu).</summary>
+    public override bool ShouldProcurePotion(PotionModel potion, Player player)
+    {
+        var owner = Owner;
+        if (owner is null || player != owner)
+        {
+            return true;
+        }
+        return !HasPassive("restrict_potion");
+    }
+
+    /// <summary>Restriction: per-turn card-play cap (VelvetChoker). The cap is
+    /// the fragment's amount; the engine counts plays itself, so no state is
+    /// needed here (the engine's own relic keeps the counter, and our affix is
+    /// self-contained because the count is derived from combat history).</summary>
+    public override bool ShouldPlay(CardModel card, AutoPlayType autoPlayType)
+    {
+        var owner = Owner;
+        if (owner is null || card.Owner != owner)
+        {
+            return true;
+        }
+        int cap = 0;
+        foreach (EffectFragment effect in PassivesWith("restrict_card_play"))
+        {
+            cap = cap == 0 ? effect.Amount : Math.Min(cap, effect.Amount);
+        }
+        if (cap <= 0)
+        {
+            return true;
+        }
+        // Counts EVERY owner card play, auto-play included: VelvetChoker's own
+        // AfterCardPlayed increments unconditionally (VelvetChoker.cs:63-71), so
+        // filtering auto-plays here would let extra plays past the cap.
+        int played = CombatManager.Instance.History.CardPlaysFinished.Count(e =>
+            e.Actor == owner.Creature
+            && e.HappenedThisTurn(owner.Creature.CombatState));
+        return played < cap;
+    }
+
+    /// <summary>Restriction: card-effect draws are vetoed (Fiddle). The opening
+    /// hand is exempt - CombatManager draws it with fromHandDraw: true
+    /// (CombatManager.cs:924), so a relic carrying this affix still draws its
+    /// normal hand and the run stays playable. The engine relic also permits
+    /// out-of-turn draws (its third guard, side != CurrentSide), which is
+    /// mirrored here: Fiddle vetoes only during the owner's own turn.</summary>
+    public override bool ShouldDraw(Player player, bool fromHandDraw)
+    {
+        var owner = Owner;
+        if (fromHandDraw || owner is null || player != owner)
+        {
+            return true;
+        }
+        if (player.Creature?.CombatState is { } combatState
+            && player.Creature.Side != combatState.CurrentSide)
+        {
+            return true;
+        }
+        return !HasPassive("restrict_draw");
+    }
+
+    /// <summary>Restriction: Power cards cost +1 (SpikedGauntlets).</summary>
+    public override bool TryModifyEnergyCostInCombat(CardModel card, decimal originalCost, out decimal modifiedCost)
+    {
+        modifiedCost = originalCost;
+        var owner = Owner;
+        if (owner is null || card.Owner?.Creature != owner.Creature || card.Type != CardType.Power)
+        {
+            return false;
+        }
+        if (!HasPassive("modify_card_cost"))
+        {
+            return false;
+        }
+        modifiedCost = originalCost + 1m;
+        return true;
+    }
+
+    /// <summary>Benefit: hand is not flushed at end of turn (RunicPyramid).</summary>
+    public override bool ShouldFlush(Player player)
+    {
+        var owner = Owner;
+        if (owner is null || player != owner)
+        {
+            return true;
+        }
+        return !HasPassive("retain_hand");
+    }
+
+    /// <summary>
+    /// Benefit: an extra turn when no cards were played (Pael's Eye).
+    ///
+    /// The once-per-combat latch is REQUIRED, not cosmetic: the engine re-polls
+    /// this hook every time the player side ends (CombatManager
+    /// SwitchFromPlayerToEnemySide), so without it an empty-handed turn grants
+    /// another turn, which draws a fresh hand, which can be played empty again -
+    /// an unbounded turn loop. The engine relic bounds it with UsedThisCombat,
+    /// set in AfterTakingExtraTurn and cleared in AfterCombatEnd; we mirror both.
+    /// </summary>
+    public override bool ShouldTakeExtraTurn(Player player)
+    {
+        var owner = Owner;
+        if (owner is null || player != owner || !HasPassive("extra_turn"))
+        {
+            return false;
+        }
+        if (_extraTurnUsedThisCombat || !_wasOwnerPartOfLastPlayerTurn)
+        {
+            return false;
+        }
+        return !AnyCardsPlayedThisTurn(owner);
+    }
+
+    /// <summary>
+    /// Benefit: exhausts the hand before granting the extra turn (Pael's Eye).
+    ///
+    /// Without this the affix is strictly stronger than its text: the engine
+    /// relic burns the hand (BeforeSideTurnEndEarly) and only then takes the
+    /// extra turn, so "take an extra turn if you play no cards" costs you the
+    /// hand you were holding. Granting the turn alone would mean keeping the
+    /// hand AND drawing a fresh one - a different, much stronger effect.
+    /// Guard set mirrors PaelsEye.cs:110-121 exactly.
+    /// </summary>
+    public override async Task BeforeSideTurnEndEarly(PlayerChoiceContext choiceContext, CombatSide side,
+        IEnumerable<Creature> participants)
+    {
+        var owner = Owner;
+        if (owner is null || !participants.Contains(owner.Creature))
+        {
+            return;
+        }
+        if (_extraTurnUsedThisCombat || !HasPassive("extra_turn"))
+        {
+            return;
+        }
+        if (AnyCardsPlayedThisTurn(owner))
+        {
+            return;
+        }
+        try
+        {
+            foreach (CardModel card in PileType.Hand.GetPile(owner).Cards.ToList())
+            {
+                await CardCmd.Exhaust(choiceContext, card);
+            }
+        }
+        catch (Exception e)
+        {
+            MainFile.Logger.Error($"[{MainFile.ModId}] extra-turn hand exhaust suppressed: {e.Message}");
+        }
+    }
+
+    private static bool AnyCardsPlayedThisTurn(Player owner) =>
+        CombatManager.Instance.History.CardPlaysFinished.Any(e =>
+            e.Actor == owner.Creature
+            && e.HappenedThisTurn(owner.Creature.CombatState)
+            && !e.CardPlay.IsAutoPlay);
+
+    /// <summary>Latches the extra turn for this combat (Pael's Eye UsedThisCombat).</summary>
+    public override Task AfterTakingExtraTurn(Player player)
+    {
+        var owner = Owner;
+        if (owner is not null && player == owner && HasPassive("extra_turn"))
+        {
+            _extraTurnUsedThisCombat = true;
+        }
+        return Task.CompletedTask;
+    }
+
+    private bool _extraTurnUsedThisCombat;
+
+    /// <summary>Whether the owner took part in the previous player turn
+    /// (Pael's Eye WasOwnerPartOfLastPlayerTurn, initialised true).</summary>
+    private bool _wasOwnerPartOfLastPlayerTurn = true;
+
+    /// <summary>Benefit: card rewards draw from every character's pool
+    /// (PrismaticGem). Mirrors the engine relic's guard set exactly.</summary>
+    public override CardCreationOptions ModifyCardRewardCreationOptions(Player player, CardCreationOptions options)
+    {
+        var owner = Owner;
+        if (owner is null || owner != player)
+        {
+            return options;
+        }
+        if (!HasPassive("expand_card_pool"))
+        {
+            return options;
+        }
+        if (options.Flags.HasFlag(CardCreationFlags.NoCardPoolModifications)
+            || !options.Flags.HasFlag(CardCreationFlags.IsCardReward)
+            || options.CardPools.All(p => p.IsColorless))
+        {
+            return options;
+        }
+        return options.WithCardPools(player.UnlockState.CharacterCardPools.Union(options.CardPools));
+    }
+
+    /// <summary>Benefit: enchant card rewards with Glam (Glitter / SilkenTress).</summary>
+    public override bool TryModifyCardRewardOptionsLate(Player player, List<CardCreationResult> cardRewards,
+        CardCreationOptions options)
+    {
+        var owner = Owner;
+        if (owner is null || player != owner || !HasPassive("enchant_reward"))
+        {
+            return false;
+        }
+        if (!options.Flags.HasFlag(CardCreationFlags.IsCardReward))
+        {
+            return false;
+        }
+        Glam glam = ModelDb.Enchantment<Glam>();
+        foreach (CardCreationResult reward in cardRewards)
+        {
+            CardModel card = reward.Card;
+            if (!glam.CanEnchant(card))
+            {
+                continue;
+            }
+            CardModel clone = owner.RunState.CloneCard(card);
+            CardCmd.Enchant<Glam>(clone, 1m);
+            reward.ModifyCard(clone, this);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Restriction: enemies gain Strength (PhilosophersStone).
+    ///
+    /// Applied from two hooks, mirroring the engine relic: the combat-start
+    /// roster (AfterRoomEntered) and creatures added mid-combat
+    /// (AfterCreatureAddedToCombat). Applying only from the latter would make
+    /// the affix dead in every normal fight - its sole caller requires an
+    /// already-in-progress combat.
+    /// </summary>
+    private async Task ApplyEnemyStrengthAsync(Player? owner)
+    {
+        if (owner?.Creature?.CombatState is null)
+        {
+            return;
+        }
+        int amount = PassivesWith("enemy_strength_gain").Sum(e => e.Amount);
+        if (amount <= 0)
+        {
+            return;
+        }
+        try
+        {
+            var enemies = owner.Creature.CombatState.GetOpponentsOf(owner.Creature)
+                .Where(c => c.IsAlive);
+            await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), enemies,
+                amount, null, null);
+        }
+        catch (Exception e)
+        {
+            MainFile.Logger.Error($"[{MainFile.ModId}] enemy strength affix suppressed: {e.Message}");
+        }
+    }
+
+    public override async Task AfterCreatureAddedToCombat(Creature creature)
+    {
+        var owner = Owner;
+        if (owner is null || creature.Side == owner.Creature.Side)
+        {
+            return;
+        }
+        int amount = PassivesWith("enemy_strength_gain").Sum(e => e.Amount);
+        if (amount <= 0)
+        {
+            return;
+        }
+        try
+        {
+            await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), creature,
+                amount, null, null);
+        }
+        catch (Exception e)
+        {
+            MainFile.Logger.Error($"[{MainFile.ModId}] enemy strength affix suppressed: {e.Message}");
+        }
     }
 
     // ---------- Condition evaluation (stateless by design) ----------

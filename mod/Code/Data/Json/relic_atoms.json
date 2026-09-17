@@ -1,7 +1,7 @@
 {
  "schema": "relic-atoms/v1",
  "source": "MegaCrit.Sts2.Core.Models.Relics (engine decompile)",
- "atomCount": 146,
+ "atomCount": 156,
  "atoms": [
   {
    "Id": "Akabeko#AfterSideTurnStart#0",
@@ -3082,114 +3082,265 @@
     "Trigger": null
    }
   },
- {
-  "Id": "CursedPearl#AfterObtained#1",
-  "Source": "CursedPearl",
-  "Rarity": "Ancient",
-  "Spec": {
-   "Opcode": "add_curse",
-   "Variant": "greed",
-   "Target": "self",
-   "Values": [],
-   "Condition": null,
-   "Trigger": {
-    "Kind": "obtained",
-    "Lifetime": "immediate"
-   }
-  }
- }
-,
- {
-  "Id": "CallingBell#AfterObtained#1",
-  "Source": "CallingBell",
-  "Rarity": "Ancient",
-  "Spec": {
-   "Opcode": "add_curse",
-   "Variant": "curse_of_the_bell",
-   "Target": "self",
-   "Values": [],
-   "Condition": null,
-   "Trigger": {
-    "Kind": "obtained",
-    "Lifetime": "immediate"
-   }
-  }
- }
-,
- {
-  "Id": "BloodSoakedRose#AfterObtained#1",
-  "Source": "BloodSoakedRose",
-  "Rarity": "Ancient",
-  "Spec": {
-   "Opcode": "add_curse",
-   "Variant": "enthralled",
-   "Target": "self",
-   "Values": [],
-   "Condition": null,
-   "Trigger": {
-    "Kind": "obtained",
-    "Lifetime": "immediate"
-   }
-  }
- }
-,
- {
-  "Id": "PreservedFog#AfterObtained#1",
-  "Source": "PreservedFog",
-  "Rarity": "Ancient",
-  "Spec": {
-   "Opcode": "add_curse",
-   "Variant": "folly",
-   "Target": "self",
-   "Values": [],
-   "Condition": null,
-   "Trigger": {
-    "Kind": "obtained",
-    "Lifetime": "immediate"
-   }
-  }
- }
-,
- {
-  "Id": "SealOfGold#AfterSideTurnStart#1",
-  "Source": "SealOfGold",
-  "Rarity": "Ancient",
-  "Spec": {
-   "Opcode": "lose_gold",
-   "Variant": "immediate",
-   "Target": "self",
-   "Values": [
-    {
-     "Id": "amount",
-     "BaseValue": 3,
-     "Source": "fixed",
-     "Offset": 0,
-     "Upgradable": false
+  {
+   "Id": "CursedPearl#AfterObtained#1",
+   "Source": "CursedPearl",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "add_curse",
+    "Variant": "greed",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
     }
-   ],
-   "Condition": null,
-   "Trigger": {
-    "Kind": "turn_start",
-    "Lifetime": "combat"
+   }
+  },
+  {
+   "Id": "CallingBell#AfterObtained#1",
+   "Source": "CallingBell",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "add_curse",
+    "Variant": "curse_of_the_bell",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "BloodSoakedRose#AfterObtained#1",
+   "Source": "BloodSoakedRose",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "add_curse",
+    "Variant": "enthralled",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "PreservedFog#AfterObtained#1",
+   "Source": "PreservedFog",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "add_curse",
+    "Variant": "folly",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "SealOfGold#AfterSideTurnStart#1",
+   "Source": "SealOfGold",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "lose_gold",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 3,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "SilkenTress#AfterObtained#1",
+   "Source": "SilkenTress",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "lose_gold",
+    "Variant": "all",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "Ectoplasm#ModifyGoldGained",
+   "Source": "Ectoplasm",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "restrict_gold",
+    "Variant": "zero",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "Fiddle#ShouldDraw",
+   "Source": "Fiddle",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "restrict_draw",
+    "Variant": "block",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "Glitter#TryModifyCardRewardOptionsLate",
+   "Source": "Glitter",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "enchant_reward",
+    "Variant": "glam",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "PaelsEye#ShouldTakeExtraTurn",
+   "Source": "PaelsEye",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "extra_turn",
+    "Variant": "always",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "PhilosophersStone#AfterCreatureAddedToCombat",
+   "Source": "PhilosophersStone",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "enemy_strength_gain",
+    "Variant": "strength",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "PrismaticGem#ModifyCardRewardCreationOptions",
+   "Source": "PrismaticGem",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "expand_card_pool",
+    "Variant": "character",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "RunicPyramid#ShouldFlush",
+   "Source": "RunicPyramid",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "retain_hand",
+    "Variant": "always",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "Sozu#ShouldProcurePotion",
+   "Source": "Sozu",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "restrict_potion",
+    "Variant": "block",
+    "Target": "self",
+    "Values": [],
+    "Condition": {
+     "Kind": "owner_turn"
+    },
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "SpikedGauntlets#TryModifyEnergyCostInCombat",
+   "Source": "SpikedGauntlets",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "modify_card_cost",
+    "Variant": "power",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": null
+   }
+  },
+  {
+   "Id": "VelvetChoker#ShouldPlay",
+   "Source": "VelvetChoker",
+   "Rarity": "Ancient",
+   "Spec": {
+    "Opcode": "restrict_card_play",
+    "Variant": "cap",
+    "Target": "self",
+    "Values": [],
+    "Condition": null,
+    "Trigger": null
    }
   }
- }
-,
- {
-  "Id": "SilkenTress#AfterObtained#1",
-  "Source": "SilkenTress",
-  "Rarity": "Ancient",
-  "Spec": {
-   "Opcode": "lose_gold",
-   "Variant": "all",
-   "Target": "self",
-   "Values": [],
-   "Condition": null,
-   "Trigger": {
-    "Kind": "obtained",
-    "Lifetime": "immediate"
-   }
-  }
- }
  ]
 }

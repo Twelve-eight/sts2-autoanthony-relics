@@ -70,7 +70,26 @@ internal static class Program
         new(StringComparer.Ordinal) { "combat_end", "combat_victory" };
 
     private const string EnemyTarget = "all_enemies";
-    private const string PassiveOpcode = "modify_hand_draw";
+
+    /// <summary>
+    /// Opcodes a passive relic may carry (mirrors RelicGenerator.PassiveOpcodes,
+    /// which is private). Every one has an executor override in
+    /// AnthonyRelicModel; this copy is the probe's independent oracle.
+    /// </summary>
+    private static readonly HashSet<string> PassiveOpcodes = new(StringComparer.Ordinal)
+    {
+        "modify_hand_draw", "modify_max_energy",
+        "restrict_gold", "restrict_potion", "restrict_card_play",
+        "restrict_draw", "modify_card_cost", "enemy_strength_gain",
+        "retain_hand", "extra_turn", "expand_card_pool", "enchant_reward",
+    };
+
+    /// <summary>Restrictions must ship with their engine offset (v5 rule 5).</summary>
+    private static readonly HashSet<string> RestrictionOpcodes = new(StringComparer.Ordinal)
+    {
+        "restrict_gold", "restrict_potion", "restrict_card_play",
+        "restrict_draw", "modify_card_cost", "enemy_strength_gain",
+    };
 
     /// <summary>True when the executor drops this effect in this trigger's context.</summary>
     private static bool ExecutorWouldSkip(string triggerKind, EffectFragment effect) =>
@@ -86,8 +105,13 @@ internal static class Program
     /// <summary>The full exclusion contract the generator must implement.</summary>
     private static bool OracleExcluded(string? triggerKind, EffectFragment effect) =>
         LegacyExcluded(triggerKind, effect)
-        || (triggerKind is null && effect.Opcode != PassiveOpcode)
+        || (triggerKind is null && !PassiveOpcodes.Contains(effect.Opcode))
         || (triggerKind is not null && ExecutorWouldSkip(triggerKind, effect));
+        // NOTE rule 5 (restriction must have an engine offset) is deliberately
+        // NOT an exclusion here: every restriction in RestrictionOpcodes has an
+        // offset registered, so the generator's clause is dead for the current
+        // pool. It is asserted positively below instead (a restriction relic
+        // must carry its offset), which is the property that actually matters.
 
     public static int Main()
     {
@@ -113,6 +137,8 @@ internal static class Program
         Console.WriteLine($"distinct effect opcodes           : {opcodes.Count}");
         Console.WriteLine($"distinct effect shapes            : {shapes.Count}");
         Console.WriteLine($"passive fragments                 : {pool.PassiveEffects.Count}");
+        Console.WriteLine($"benefit fragments                 : {pool.BenefitEffects.Count}");
+        Console.WriteLine($"restriction fragments             : {pool.PassiveEffects.Count(e => e.IsRestriction)}");
         Console.WriteLine($"combat-scoped shapes              : {combatShapes.Count}");
         foreach (string shape in combatShapes)
         {
@@ -265,10 +291,18 @@ internal static class Program
                 {
                     foreach (EffectFragment effect in definition.Effects)
                     {
-                        if (effect.Opcode != PassiveOpcode)
+                        if (!PassiveOpcodes.Contains(effect.Opcode))
                         {
                             passiveDead.Add($"seed {i} slot {definition.Slot}: {effect.ShapeKey}");
                         }
+                    }
+                    // v5 rule 5, asserted positively: a restriction never ships
+                    // without its offsetting benefit in the same relic.
+                    var restriction = definition.Effects.FirstOrDefault(e => RestrictionOpcodes.Contains(e.Opcode));
+                    if (restriction is not null
+                        && !definition.Effects.Any(e => !RestrictionOpcodes.Contains(e.Opcode)))
+                    {
+                        passiveDead.Add($"seed {i} slot {definition.Slot}: bare restriction {restriction.ShapeKey}");
                     }
                     continue;
                 }
@@ -301,6 +335,10 @@ internal static class Program
 
         var usedEffects = new HashSet<string>(StringComparer.Ordinal);
         var usedTriggers = new HashSet<string>(StringComparer.Ordinal);
+        int benefitSlots = 0;
+        int passiveSlots = 0;
+        int triggeredSlots = 0;
+        var usedRestrictions = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < 200; i++)
         {
             foreach (GeneratedRelicDefinition definition in RelicGenerator.Generate($"eligibility-soak-{i}", pool))
@@ -308,6 +346,30 @@ internal static class Program
                 if (definition.Trigger is not null)
                 {
                     usedTriggers.Add(definition.Trigger.Key);
+                    triggeredSlots++;
+                }
+                else
+                {
+                    bool hasRestriction = definition.Effects.Any(e => RestrictionOpcodes.Contains(e.Opcode));
+                    bool hasBenefit = definition.Effects.Any(e => e.IsBenefit);
+                    if (hasRestriction)
+                    {
+                        foreach (EffectFragment e in definition.Effects.Where(x => RestrictionOpcodes.Contains(x.Opcode)))
+                        {
+                            usedRestrictions.Add(e.Opcode);
+                        }
+                    }
+                    // Bands are disjoint by construction (one roll): a
+                    // restriction relic is a passive slot, a strict-benefit
+                    // relic is a benefit slot.
+                    if (hasBenefit && !hasRestriction)
+                    {
+                        benefitSlots++;
+                    }
+                    else
+                    {
+                        passiveSlots++;
+                    }
                 }
                 foreach (EffectFragment effect in definition.Effects)
                 {
@@ -315,12 +377,36 @@ internal static class Program
                 }
             }
         }
-        var missingEffects = pool.TriggeredEffects.Concat(pool.PassiveEffects)
-            .Select(e => e.Key).Where(k => !usedEffects.Contains(k)).ToList();
+        var missingEffects = pool.TriggeredEffects.Concat(pool.PassiveEffects).Concat(pool.BenefitEffects)
+            .Select(e => e.Key).Distinct(StringComparer.Ordinal).Where(k => !usedEffects.Contains(k)).ToList();
         Check(missingEffects.Count == 0, "200-seed sweep: every effect fragment reachable",
             missingEffects.Count == 0 ? "" : string.Join(",", missingEffects));
         Check(usedTriggers.Count == pool.Triggers.Count, "200-seed sweep: every trigger fragment reachable",
             $"{usedTriggers.Count}/{pool.Triggers.Count}");
+        // The point of the exercise: all six Ancient restrictions must be
+        // reachable, not just the alphabetically first one.
+        var allRestrictions = pool.PassiveEffects.Where(e => e.IsRestriction).Select(e => e.Opcode)
+            .Distinct(StringComparer.Ordinal).OrderBy(o => o, StringComparer.Ordinal).ToList();
+        var unreached = allRestrictions.Where(o => !usedRestrictions.Contains(o)).ToList();
+        Check(unreached.Count == 0, "200-seed sweep: every restriction affix reachable",
+            unreached.Count == 0 ? "" : string.Join(",", unreached));
+
+        // Measured band rates. These are the constants themselves (one roll
+        // decides the band), so they are asserted against the generator's own
+        // constants rather than a hardcoded expectation.
+        int totalSlots = benefitSlots + passiveSlots + triggeredSlots;
+        Console.WriteLine();
+        Console.WriteLine("---- measured slot bands over 200 seeds ----");
+        Console.WriteLine($"benefit   : {benefitSlots,6} / {totalSlots} = {100.0 * benefitSlots / totalSlots:F2}%  (target 5%)");
+        Console.WriteLine($"passive   : {passiveSlots,6} / {totalSlots} = {100.0 * passiveSlots / totalSlots:F2}%  (target 15%)");
+        Console.WriteLine($"triggered : {triggeredSlots,6} / {totalSlots} = {100.0 * triggeredSlots / totalSlots:F2}%  (target 80%)");
+        Console.WriteLine($"restrictions seen: {string.Join(", ", usedRestrictions.OrderBy(o => o, StringComparer.Ordinal))}");
+        Check(Math.Abs(100.0 * benefitSlots / totalSlots - 5.0) < 2.0,
+            "measured benefit band is within 2 points of 5%",
+            $"{100.0 * benefitSlots / totalSlots:F2}%");
+        Check(Math.Abs(100.0 * passiveSlots / totalSlots - 15.0) < 3.0,
+            "measured passive band is within 3 points of 15%",
+            $"{100.0 * passiveSlots / totalSlots:F2}%");
 
         // ---- 7. Determinism is untouched by the new rules.
         var again = RelicGenerator.Generate(fixedSeed, pool);

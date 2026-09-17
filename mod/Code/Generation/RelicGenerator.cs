@@ -155,8 +155,13 @@ public static class RelicGenerator
     /// passive hooks execute. Same reason as v2->v3: the eligibility rules
     /// changed, so existing saves must regenerate rather than be served
     /// relics the executor silently skips.
+    /// v5: Ancient restriction/benefit affixes (user order 2026-09-17). The
+    /// passive slot became a three-way band (5% benefit / 15% passive / 80%
+    /// triggered) decided by one extra roll, and the passive opcode set
+    /// widened - both change the RNG consumption shape, so the same seed
+    /// would otherwise yield v4 relics while claiming to be v5.
     /// </summary>
-    public const string SeedVersion = "relics-v4";
+    public const string SeedVersion = "relics-v5";
 
     /// <summary>Chance a slot samples a second effect (both bound to the trigger).</summary>
     private const int TwoEffectChancePercent = 30;
@@ -165,14 +170,45 @@ public static class RelicGenerator
     private const int PassiveRelicChancePercent = 15;
 
     /// <summary>
-    /// Downside fragments (EffectFragment.IsDownside) weigh 140 vs 100 for
-    /// everything else: their per-pick share is 1.4x uniform, i.e. their
-    /// appearance probability is raised 40% relative to the pre-downside
-    /// distribution (user order 2026-09-15). Deliberately NOT a config key -
-    /// no config may participate in generation (see GeneratedRelicDefinition).
+    /// Chance a slot is a strictly-beneficial passive relic (user order
+    /// 2026-09-17). Rolled on the SAME draw as <see cref="PassiveRelicChancePercent"/>,
+    /// so the two are disjoint slot-level bands: 15% passive, 5% benefit, 80%
+    /// triggered. It is a slot-level gate rather than a fragment weight because
+    /// the passive draw is uniform - PickUniquely hardcodes NormalWeight - so a
+    /// weight could not express "5% of relics" at all.
     /// </summary>
-    private const int DownsideWeight = 140;
+    private const int BenefitRelicChancePercent = 5;
+
+    /// <summary>
+    /// Restriction affix -> the offsetting benefit the engine ships it with.
+    /// The engine never ships a bare restriction (Ectoplasm pairs gold-loss
+    /// with +1 Energy, Fiddle pairs no-draw with +2 hand draw, ..), and the
+    /// passive slot holds one fragment, so a restriction is always generated
+    /// together with its offset (Excluded rule 5). Without this a generated
+    /// restriction relic would be pure cost, which the player is forced to pick
+    /// up and cannot remove.
+    /// </summary>
+    private static readonly Dictionary<string, string> RestrictionOffsets = new(StringComparer.Ordinal)
+    {
+        ["restrict_gold"] = "modify_max_energy",
+        ["restrict_potion"] = "modify_max_energy",
+        ["restrict_card_play"] = "modify_max_energy",
+        ["restrict_draw"] = "modify_hand_draw",
+        ["modify_card_cost"] = "modify_max_energy",
+        ["enemy_strength_gain"] = "modify_max_energy",
+    };
+
     private const int NormalWeight = 100;
+
+    /// <summary>
+    /// Downside fragments draw UNIFORMLY with everything else (user order
+    /// 2026-09-17, superseding the 2026-09-15 order). They previously carried
+    /// weight 140 vs 100, i.e. a 1.4x per-pick share that raised their
+    /// appearance probability 40% above uniform; that bonus is cancelled.
+    /// Sampling is uniform and this class no longer weights anything.
+    /// Deliberately NOT a config key - no config may participate in
+    /// generation (see GeneratedRelicDefinition).
+    /// </summary>
 
     /// <summary>
     /// Triggers that can fire while the owner has no combat context at all
@@ -226,12 +262,31 @@ public static class RelicGenerator
     private const string EnemyTarget = "all_enemies";
 
     /// <summary>
-    /// The only opcode a passive (trigger-less) relic can carry: the executor's
-    /// passive hook is ModifyHandDraw, which skips every effect whose opcode is
-    /// not this one. A passive fragment with any other opcode would be a relic
+    /// Opcodes a passive (trigger-less) relic may carry. The executor
+    /// implements one override per opcode here (AnthonyRelicModel's passive
+    /// modifiers); a passive fragment with any other opcode would be a relic
     /// whose text promises an effect nothing ever runs.
+    ///
+    /// Was a single constant ("modify_hand_draw") until 2026-09-17. It became
+    /// a set when the Ancient restriction/benefit affixes entered the pool:
+    /// with one constant every restriction passive was structurally
+    /// unsampleable, so rule 3 rejected the entire new pool.
     /// </summary>
-    private const string PassiveOpcode = "modify_hand_draw";
+    private static readonly HashSet<string> PassiveOpcodes = new(StringComparer.Ordinal)
+    {
+        "modify_hand_draw",
+        "modify_max_energy",
+        "restrict_gold",
+        "restrict_potion",
+        "restrict_card_play",
+        "restrict_draw",
+        "modify_card_cost",
+        "enemy_strength_gain",
+        "retain_hand",
+        "extra_turn",
+        "expand_card_pool",
+        "enchant_reward",
+    };
 
     /// <summary>
     /// Generation-policy exclusions. A relic must never promise an effect the
@@ -250,7 +305,9 @@ public static class RelicGenerator
     ///    content. The fragments stay in the pool and ledger as data-
     ///    fidelity records; they are merely unsampleable here.
     ///    LoseMaxHp downsides are unaffected.
-    /// 3. Passive slots execute only the hand-draw modifier.
+    /// 3. Passive slots execute only the opcodes in <see cref="PassiveOpcodes"/>
+    ///    (one executor override each). Restrictions additionally require their
+    ///    engine offset (rule 5).
     /// 4. Execution-context eligibility (WS-0916-05, v4): a combat-scoped
     ///    opcode must not ride a trigger that can fire without a combat
     ///    context (the executor logs "skipped: no combat context" and drops
@@ -259,6 +316,11 @@ public static class RelicGenerator
     ///    pairs only - the fragments stay in the pool, every one of them keeps
     ///    at least one legal trigger, and no weight, budget, candidate order or
     ///    RNG draw changes for the candidates that stay eligible.
+    /// 5. Restriction pairing (v5, user order 2026-09-17): a restriction affix
+    ///    is sampled only together with the offsetting benefit the engine ships
+    ///    it with (see RestrictionOffsets). The engine never ships a bare
+    ///    restriction, and the passive slot holds ONE fragment, so the offset
+    ///    is what keeps a generated restriction relic from being pure cost.
     /// </summary>
     internal static bool Excluded(TriggerFragment? trigger, EffectFragment effect) =>
         (trigger is not null
@@ -266,13 +328,16 @@ public static class RelicGenerator
             && effect.Opcode == "gain_gold")
         || (effect.Opcode == "gain_max_hp"
             && (trigger is null || trigger.Kind != "obtained"))
-        || (trigger is null && effect.Opcode != PassiveOpcode)
+        || (trigger is null && !PassiveOpcodes.Contains(effect.Opcode))
         || (trigger is not null
             && TriggersWithoutCombatContext.Contains(trigger.Kind)
             && EffectFragment.CombatScopedOpcodes.Contains(effect.Opcode))
         || (trigger is not null
             && TriggersAfterEnemiesAreDead.Contains(trigger.Kind)
-            && effect.Target == EnemyTarget);
+            && effect.Target == EnemyTarget)
+        || (trigger is null
+            && effect.IsRestriction
+            && !RestrictionOffsets.ContainsKey(effect.Opcode));
 
     public static IReadOnlyList<GeneratedRelicDefinition> Generate(string runSeed, RelicFragmentPool pool)
     {
@@ -302,25 +367,9 @@ public static class RelicGenerator
             TriggerFragment? trigger = null;
             var effects = new List<EffectFragment>();
 
-            EffectFragment? passive = null;
-            if (pool.PassiveEffects.Count > 0 && random.Next(100) < PassiveRelicChancePercent)
-            {
-                passive = PickUniquely(random, pool.PassiveEffects,
-                    e => usedPassives.Add(e.ShapeKey), e => !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e))
-                    // Every remaining passive is already used by this run; fall
-                    // back only among passives that are eligible, and if there is
-                    // no eligible one at all, generate a triggered relic instead
-                    // (never sample an ineligible passive: its opcode is one no
-                    // passive hook executes, so its text would be dead).
-                    ?? PickEligiblePassive(random, pool.PassiveEffects);
-            }
+            effects.AddRange(PickPassives(random, pool, usedPassives));
 
-            if (passive is not null)
-            {
-                usedPassives.Add(passive.ShapeKey);
-                effects.Add(passive);
-            }
-            else
+            if (effects.Count == 0)
             {
                 trigger = pool.Triggers[random.Next(pool.Triggers.Count)];
 
@@ -358,16 +407,8 @@ public static class RelicGenerator
                 };
                 effects.Clear();
                 trigger = null;
-                EffectFragment? retryPassive = null;
-                if (pool.PassiveEffects.Count > 0 && random.Next(100) < PassiveRelicChancePercent)
-                {
-                    retryPassive = PickEligiblePassive(random, pool.PassiveEffects);
-                }
-                if (retryPassive is not null)
-                {
-                    effects.Add(retryPassive);
-                }
-                else
+                effects.AddRange(PickPassives(random, pool, usedPassives));
+                if (effects.Count == 0)
                 {
                     trigger = pool.Triggers[random.Next(pool.Triggers.Count)];
                     int effectCount = random.Next(100) < TwoEffectChancePercent ? 2 : 1;
@@ -395,6 +436,119 @@ public static class RelicGenerator
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Pick the passive fragments for one slot, or null to generate a triggered
+    /// relic instead.
+    ///
+    /// Bands are disjoint and decided by ONE roll, so the slot rates are the
+    /// constants themselves: &lt; 5 benefit, &lt; 20 passive (i.e. 5% + 15%),
+    /// else triggered. A benefit relic is a single strict-benefit fragment; a
+    /// passive relic is either one non-benefit passive (hand-draw modifier) or
+    /// a restriction together with its offsetting benefit.
+    ///
+    /// Returns the chosen fragments (empty when the pools are exhausted, which
+    /// makes the caller fall through to the triggered path).
+    /// </summary>
+    private static List<EffectFragment> PickPassives(
+        DeterministicRandom random,
+        RelicFragmentPool pool,
+        ISet<string> usedPassives)
+    {
+        var chosen = new List<EffectFragment>();
+        if (pool.PassiveEffects.Count == 0 && pool.BenefitEffects.Count == 0)
+        {
+            return chosen;
+        }
+
+        int roll = random.Next(100);
+        bool wantBenefit = roll < BenefitRelicChancePercent;
+        bool wantPassive = roll < BenefitRelicChancePercent + PassiveRelicChancePercent;
+
+        if (wantBenefit)
+        {
+            EffectFragment? benefit = PickUniquely(random, pool.BenefitEffects,
+                e => usedPassives.Add(e.ShapeKey),
+                e => !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e))
+                ?? PickEligiblePassive(random, pool.BenefitEffects);
+            if (benefit is not null)
+            {
+                usedPassives.Add(benefit.ShapeKey);
+                chosen.Add(benefit);
+                return chosen;
+            }
+            // No benefit left this run: fall through to the passive band rather
+            // than silently turning the slot into a triggered relic.
+            wantPassive = true;
+        }
+
+        if (!wantPassive)
+        {
+            return chosen;
+        }
+
+        // Restriction pairing: a restriction fragment is only ever taken with
+        // its engine offset, so the relic is never pure cost. Both fragments
+        // come from the pools and are marked used like any other passive.
+        //
+        // The pair is drawn UNIFORMLY over the eligible pairs (one Next(int)),
+        // not first-match: a first-match scan would ignore the RNG and let
+        // restrictions consume the whole passive band, starving the hand-draw
+        // passives - a far larger bias than the weight this change cancels.
+        var pairs = new List<(EffectFragment Restriction, EffectFragment Offset)>();
+        foreach (EffectFragment candidate in pool.PassiveEffects)
+        {
+            if (!candidate.IsRestriction
+                || usedPassives.Contains(candidate.ShapeKey)
+                || Excluded(null, candidate)
+                || !RestrictionOffsets.TryGetValue(candidate.Opcode, out string? offsetOpcode))
+            {
+                continue;
+            }
+            // The offset must be the BENEFICIAL side of its opcode. modify_hand_draw
+            // carries both signs (BagOfPreparation +2, BigMushroom -2) and the
+            // pool is ordered by Key, so a plain FirstOrDefault would pick the
+            // -2 downside and ship "no draw" + "draw 2 fewer". Amount > 0
+            // selects the benefit; the other offset opcode (modify_max_energy)
+            // is positive-only.
+            EffectFragment? offset = pool.BenefitEffects.Concat(pool.PassiveEffects).FirstOrDefault(e =>
+                string.Equals(e.Opcode, offsetOpcode, StringComparison.Ordinal)
+                && e.Amount > 0
+                && !Excluded(null, e));
+            if (offset is not null)
+            {
+                pairs.Add((candidate, offset));
+            }
+        }
+        if (pairs.Count > 0)
+        {
+            var (restriction, offset) = pairs[random.Next(pairs.Count)];
+            // Only the RESTRICTION is consumed. The offset is a generic
+            // engine benefit (+1 Energy, +2 hand draw) whose atoms all collapse
+            // to one fragment per opcode, so consuming it would exhaust the
+            // offset pool after a single restriction relic and cap the whole
+            // run at one restriction - leaving four of the six unsampleable.
+            usedPassives.Add(restriction.ShapeKey);
+            chosen.Add(restriction);
+            chosen.Add(offset);
+            return chosen;
+        }
+
+        // Final fallback: a plain passive (hand-draw modifier either sign).
+        // Restrictions are excluded here on purpose - they may only enter
+        // through the pairing branch above, otherwise this uniform draw would
+        // emit a bare restriction with no offset.
+        EffectFragment? passive = PickUniquely(random, pool.PassiveEffects,
+            e => usedPassives.Add(e.ShapeKey),
+            e => !e.IsRestriction && !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e))
+            ?? PickEligiblePassive(random, pool.PassiveEffects.Where(e => !e.IsRestriction).ToList());
+        if (passive is not null)
+        {
+            usedPassives.Add(passive.ShapeKey);
+            chosen.Add(passive);
+        }
+        return chosen;
     }
 
     private static (string en, string zhs) PickName(DeterministicRandom random, ISet<string> used)
@@ -500,8 +654,14 @@ public static class RelicGenerator
         return picked;
     }
 
-    private static int WeightOf(EffectFragment effect) =>
-        effect.IsDownside ? DownsideWeight : NormalWeight;
+    /// <summary>
+    /// Uniform for every fragment (user order 2026-09-17): the downside bonus
+    /// (140 vs 100) was cancelled, so this is now a constant. It is kept as a
+    /// hook rather than deleted because PickWeightedUniquely's signature and
+    /// the deterministic draw sequence are built around it - replacing it with
+    /// a literal would be a larger change for no behavioural difference.
+    /// </summary>
+    private static int WeightOf(EffectFragment effect) => NormalWeight;
 
     private const string ModId = "AutoAnthonyRelics";
 }

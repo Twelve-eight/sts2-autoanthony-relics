@@ -110,19 +110,85 @@ python "G:/omp works/Sts/AutoAnthonyRelics/.tmp/dotnet-env.py" \
 `CombatScopedOpcodes` 单一定义在 `EffectFragment` 上, 生成器与执行器共用, 避免两边漂移
 (这正是本条目描述的缺陷).
 
-规则覆盖(权威来源 = 探针 `tools/relic-eligibility-probe` 的 `---- pool` 与 `---- rule (a)/(b) reach`
-两段; 2026-09-17 与实机启动日志 `15 triggers, 31 triggered effects, 2 passives` 逐字一致):
+规则覆盖(权威来源 = 探针 `tools/relic-eligibility-probe` 的实际输出, 复现命令 `dotnet run`):
 
-- 池: 15 个 trigger 片段(12 个 distinct Kind)x 31 个 triggered effect 片段(13 个 opcode / 21 个 shape),
-  2 个 passive 片段; 其中战斗域 shape 8 个, `all_enemies` shape 2 个.
-- 规则 (a) 排除: 2 个无战斗上下文 trigger x 8 个战斗域 shape = 16(Kind x shape).
-- 规则 (b) 排除: 2 个敌人全死 trigger x 2 个 `all_enemies` shape = 4, 其中 4 条不被 (a) 覆盖.
-- 合计排除: 71 of 252(Kind x shape)/ 26 of 156(Kind x opcode).
-  opcode 粒度比规则粗 -- `apply_power` 的 `all_enemies` 变体在 dead-enemy trigger 下非法, 但其 self
-  变体合法, 因此 Kind x opcode 计数无法精确表达该规则, 以 shape 计数为准.
-- 200-seed 扫描: 每个 effect 片段与 trigger 片段仍可达; 同 seed 结果逐字节一致.
+```
+trigger fragments (Kind|Condition) : 15
+distinct trigger Kinds            : 12
+triggered effect fragments        : 31
+distinct effect opcodes           : 13
+distinct effect shapes            : 21
+passive fragments                 : 2
+combat-scoped shapes              : 8
+all_enemies shapes                : 2
+Kinds x opcodes   : 12 x 13 = 156
+Kinds x shapes    : 12 x 21 = 252
+trigger keys x shapes : 15 x 21 = 315
+rule (a) rejects : 2 no-combat triggers x 8 combat-scoped shapes = 16 (Kind x shape)
+rule (b) rejects : 2 dead-enemy triggers x 2 all_enemies shapes = 4, of which 4 are not already rejected by (a)
+context rejections (union, Kind x shape) : 20 of 252
+all exclusions      (union, Kind x shape) : 71 of 252
+all exclusions      (Kind x opcode)      : 26 of 156
+```
 
-权重、点数预算(负面 140 / 普通 100)、候选顺序与 RNG 抽取序列均未改变; 规则只做配对排除.
+opcode 粒度比规则粗 -- `apply_power` 的 `all_enemies` 变体在 dead-enemy trigger 下非法, 但其 self 变体
+合法, 因此 Kind x opcode 计数无法精确表达该规则, **以 shape 计数为准**(探针原文亦如此说明).
+2026-09-17 实机启动行 `15 triggers, 31 triggered effects, 2 passives` 与探针首段逐字一致.
+
+权重,点数预算(负面 140 / 普通 100),候选顺序与 RNG 抽取序列均未改变; 规则只做配对排除.
+
+## 先古限制类词条 (2026-09-17, SeedVersion v5)
+
+### 一次已纠正的普查错误(先记录, 免得再犯)
+
+首次普查用**钩子名正则**筛出 26 个"限制类钩子", 这是错的, 已废弃:
+
+- 7 个只命中 `ModifyMaxEnergy`(`BlessedAntler` / `BloodSoakedRose` / `PaelsFlesh` /
+  `PhilosophersStone` / `PumpkinCandle` / `SpikedGauntlets` / `WhisperingEarring`) -- 那是
+  先古标准的 **+1 能量增益**, 不含任何限制;
+- `PrismaticGem` / `StoneHumidifier` / `GoldenCompass` 无限制语义;
+- 反而**漏掉**了 `PhilosophersStone.AfterCreatureAddedToCombat`(给敌人加力量)与
+  `SpikedGauntlets.TryModifyEnergyCostInCombat`(能力牌费 +1)这两个真实负面。
+
+正确做法: 先古 102 个遗物**全量**取 `public override` 实现体, 按**语义极性**判定, 不按钩子名。
+
+### 真实限制类负面(逐条对照 `research/engine-dllsrc/.../Relics/*.cs`)
+
+| 遗物 | 钩子 | 语义 | 实现体要点 | 引擎配对增益 |
+|---|---|---|---|---|
+| Ectoplasm | `ModifyGoldGained` | 金币获取归零 | `return 0m;` | `ModifyMaxEnergy` +1 |
+| Sozu | `ShouldProcurePotion` | 无法获得药水 | `player != base.Owner` | `ModifyMaxEnergy` +1 |
+| VelvetChoker | `ShouldPlay` | 每回合出牌上限 | `_cardsPlayedThisTurn >= CardsVar(6)` | `ModifyMaxEnergy` +1 |
+| Fiddle | `ShouldDraw` | 卡牌效果无法抽牌 | 非 `fromHandDraw` 时 `false` | `ModifyHandDraw` +2 |
+| SpikedGauntlets | `TryModifyEnergyCostInCombat` | 能力牌费 +1 | `CardType.Power` 时 `+1m` | `ModifyMaxEnergy` +1 |
+| PhilosophersStone | `AfterCreatureAddedToCombat` | 敌人 +1 力量 | `PowerCmd.Apply<StrengthPower>` | `ModifyMaxEnergy` +1 |
+| SilverCrucible | `ShouldGenerateTreasure` | 前 2 个宝箱房不生成 | `TreasureRoomsEntered > 1` | 升级 3 张牌 |
+
+**`Fiddle.ShouldDraw` 不是开局必死**(实测反编译证据): `CombatManager.cs:924` 的回合起始抽牌
+调用是 `CardPileCmd.Draw(..., fromHandDraw: true)`, 而 Fiddle 在 `fromHandDraw` 时**返回 true**,
+所以正常起手仍然抽满, 它只否决**卡牌效果**的抽牌。`CardPileCmd.cs:1013` 的
+`!Hook.ShouldDraw(..)` -> `return Array.Empty<CardModel>()` 只在非起手路径生效。
+
+### 引擎的配对设计(决定了实现形状)
+
+引擎**从不单独给出限制**: 上表每一行的限制都与一个增益同体出现。因此限制类词条必须与配对
+增益**同体**进入遗物, 否则生成的是"只有代价、没有收益"的残废遗物 -- 与引擎自身的设计语言
+相悖。纯增益(不含限制)的遗物才是"纯增益", 受 5% 门控。
+
+### `extract.py` 策略反转(必须显式声明)
+
+`extract.py` 模块 docstring 原文拒绝过这类钩子, 并**逐字点名** `potion procurement`:
+
+> bodies we cannot reduce to a known command (custom card transforms, reward screens,
+> potion procurement) - inventing an opcode for them would be inventing semantics.
+> Refusing is the honest outcome.
+
+本条目**反转**该决策: `ShouldProcurePotion` 这类钩子是引擎**具名钩子**, 实现体返回一个完全确定的
+答案, 因此 opcode 是钩子自己的名字, 而不是"发明"出来的语义。仍在拒绝的是真正无法归约的
+(自定义卡牌变换、依赖 RNG 的单敌选择器)。反转已写入 `extract.py` docstring 与本文件, 不是静默应用。
+
+`QUERY_HOOKS` 按 **(遗物, 钩子)** 建键而非按钩子名: `TryModifyCardRewardOptionsLate` 在引擎里
+有 9 个实现者(附魔 / 升级 / Glam 各不相同), 按钩子名建键会把 8 个错误标签写进"可复现"的提取产物。
 
 ## 进度
 

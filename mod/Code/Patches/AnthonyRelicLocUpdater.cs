@@ -68,6 +68,21 @@ internal static class AnthonyRelicLocUpdater
                 entries++;
             }
             MainFile.Logger.Info($"[{MainFile.ModId}] relic descriptions updated for seed {seed} ({entries} slots)");
+
+            // Bounded observability for the Ancient affixes (user order
+            // 2026-09-17): log ONLY the relics carrying a restriction or a
+            // strict benefit. Logging all 60 slots every run would be noise;
+            // these are the few slots whose content is new, and without them a
+            // run gives no evidence of what the affix pools produced.
+            foreach (var definition in definitions)
+            {
+                bool special = definition.Trigger is null
+                    && definition.Effects.Any(e => e.IsRestriction || e.IsBenefit);
+                if (special)
+                {
+                    MainFile.Logger.Info($"[{MainFile.ModId}] gen {definition.DescribeForLog()}");
+                }
+            }
         }
         catch (Exception e)
         {

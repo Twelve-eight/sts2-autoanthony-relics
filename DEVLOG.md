@@ -30,9 +30,12 @@
 
 `tools/relic-eligibility-probe`(引擎外, 直接引用构建产物):
 
-- 规则覆盖(探针 `tools/relic-eligibility-probe` 输出): 池 15 trigger 片段(12 Kind)x 31 effect 片段
-  (13 opcode / 21 shape), 2 passive; 规则 (a) 排除 2x8=16, 规则 (b) 排除 2x2=4(4 条不被 (a) 覆盖);
-  合计 71 of 252(Kind x shape)/ 26 of 156(Kind x opcode).
+- 规则覆盖(探针 `dotnet run` 实际输出, 逐字): 池 15 trigger 片段 / 12 distinct Kind; 31 triggered effect
+  片段 / 13 opcode / 21 shape; 2 passive; 战斗域 shape 8; `all_enemies` shape 2.
+  Kinds x opcodes 12x13=156; Kinds x shapes 12x21=252; trigger keys x shapes 15x21=315.
+  规则 (a) 排除 2x8=16; 规则 (b) 排除 2x2=4(4 条不被 (a) 覆盖); context 合计 20 of 252;
+  全部排除 71 of 252(Kind x shape)/ 26 of 156(Kind x opcode). 以 shape 计数为准(opcode 粒度不足以
+  表达 `apply_power` 的 all_enemies/self 变体区别).
 - 200-seed 扫描: 每个 effect 与 trigger 片段仍可达; 同 seed 逐字节一致.
 - **实机核对(2026-09-17, `I:\Slay the Spire 2` Goldberg 副本, 0.1.6)**: 启动行 `15 triggers,
   31 triggered effects, 2 passives` 与探针逐字一致; 真实对局中遗物生成走 `obtained` 路径无异常.
@@ -724,3 +727,104 @@ P1 AAR-R4-01: 新 CombatScopedOpcodes guard 没有修生成上下文. 20 个固�
 实现: RelicGenerator.Forbidden 扩展为 Excluded(递归边界 + max-HP 策略, 含被动路径防御), eligible 过滤两处 + 被动路径接入; SeedVersion relics-v2→v3(资格规则变更, 同种子将重新生成, 存档续读走版本隔离). 探针: 新增策略断言(100 seeds 无违规 + 拾取系上限遗物仍可生成 + 池内碎片保留), soak 可达性断言改为"仅 max-HP 策略碎片允许缺席"(原全量可达断言不再成立).
 
 验证: Release 0/0; relic-probe 42 项 PASS + PROBE OK; content 已重同步(dll 43bbcedf), changenote 增补策略句, VDF 校验通过. 0.1.6 仍未推工坊, 本次与下行词条池/文本重组合并为一次发布.
+
+## 2026-09-17 v0.1.7 (未提交): 先古限制类词条入池 + 取消负面权重加成 + 纯增益 5% 门控
+
+用户指令 (三条, 顺序到达):
+1. 把先古(Ancient)遗物的限制类负面补进词条池 -- "全做", 要求把限制类钩子全部列出后**按极性分池**;
+2. 取消负面词条的概率加成 (`DownsideWeight` 140 改回 100, 负面恢复均匀抽取);
+3. 先古遗物中的**纯增益**出现概率调到 **5%**.
+
+### 普查错误与纠正 (教训, 见 DEVELOP.md 同章)
+
+首次用**钩子名正则**筛出 26 个"限制类钩子" -- 错. 7 个只命中 `ModifyMaxEnergy` 的是先古标准
++1 能量增益; 反而漏掉 `PhilosophersStone.AfterCreatureAddedToCombat` 与
+`SpikedGauntlets.TryModifyEnergyCostInCombat`. 改为对 102 个先古遗物**全量**取实现体按**语义极性**
+判定. 定案 6 个真实限制类负面, 全部与配对增益同体(引擎从不单独给出限制).
+
+### 极性分池 (不是全塞负面池)
+
+纯负面 6 个入负面池; 纯增益 5 个入**受 5% 门控的正面池**. 把增益当负面会产出标注错误的遗物.
+`IsBenefit` 作用域**限定先古**: `modify_hand_draw` 故意不列入 `BenefitOpcodes`, 否则会把既有的
+`BagOfPreparation`(+2, 普通品质)从 15% 被动带挪到 5% 带 -- 属未授权的既有池行为变更.
+
+### 5% 是槽位级门控, 不是权重
+
+被动抽取路径(`PickUniquely`)硬编码 `NormalWeight`, 权重无法表达"5% 的遗物". 故
+`BenefitRelicChancePercent = 5` 与 `PassiveRelicChancePercent = 15` 用**同一次 roll** 划成互斥三段
+(5% benefit / 15% passive / 80% triggered).
+
+### 两处必须记的实现约束
+
+- **offset 不消耗 `usedPassives`**: 所有 `modify_max_energy` 原子塌缩为同一 fragment(Key 不含
+  condition), 消耗它会让整局最多只出 1 个 restriction.
+- **offset 必须取正号**: `modify_hand_draw` 同时含正负(`BagOfPreparation` +2 / `BigMushroom` -2),
+  用 `e.Amount > 0` 选正号, 否则会配出"禁抽牌 + 少抽2张".
+
+### 数据
+
+`relic_atoms.json` 146->156 (追加 10 条 query atom, **不覆盖** -- committed 文件含 6 条手工原子);
+`relic_atom_ledger.json` 36->47 supported; `downsidePool` 字段改为反转声明.
+`SeedVersion` relics-v4 -> relics-v5 (RNG 消耗形状变了).
+
+### 提取器策略反转 (已显式落盘, 非静默)
+
+`extract.py` 模块 docstring 原文逐字点名拒绝 `potion procurement`; 本条目**反转**该决策并写入
+docstring: `ShouldProcurePotion` 这类是引擎**具名钩子**, 实现体返回完全确定的答案, 故 opcode 是
+钩子自己的名字, 不是"发明"语义. 仍拒绝真正无法归约的(自定义卡牌变换/依赖 RNG 的单敌选择器).
+`QUERY_HOOKS` 按 **(遗物, 钩子)** 建键: `TryModifyCardRewardOptionsLate` 有 9 个实现者, 按钩子名
+建键会写进 8 个错误标签. 5 个带 `[SavedProperty]` 的钩子显式排除(`QUERY_HOOKS_STATEFUL`).
+
+### 执行器
+
+12 个新钩子覆写: `ModifyGoldGained` / `ShouldProcurePotion` / `ShouldPlay` / `ShouldDraw` /
+`TryModifyEnergyCostInCombat` / `ModifyMaxEnergy` / `ShouldFlush` / `ShouldTakeExtraTurn` /
+`ModifyCardRewardCreationOptions` / `TryModifyCardRewardOptionsLate` /
+`AfterCreatureAddedToCombat` / `BeforeSideTurnEndEarly`, 加 `PassivesWith`/`HasPassive` 辅助.
+`RelicText` EN+ZHS 补齐全部新 opcode (缺失会在渲染时抛异常); `Glam` 无权威 zhs 译名, 保留英文.
+
+### 实机验证 (副本 A `I:\Slay the Spire 2`, vulkan, 0.1.6 + build #2)
+
+**已通过**:
+- 启动日志池构成与探针逐字一致: 156 atoms / 47 supported / 26 rejected; 15 triggers / 31
+  triggered effects / 8 passives / 5 benefits; restrictions 6.
+- 同 seed 重启生成**完全一致** (确定性保持).
+- 生成的遗物日志确认 6 个 restriction **全部出现且都带 offset**, 4 个纯 benefit 出现.
+- **能量 5/5** = 基础 3 + benefit +1 + offset +1 -- 两条 +1 能量词条均生效.
+- **金币 99 -> 99**: 连发两次 `gold 50` 均未增加 -- `ModifyGoldGained` 限制钩子生效
+  (`PlayerCmd.GainGold` -> `Hook.ModifyGoldGained` 是唯一路径, 命令回显的 "'50' gold added."
+  是**不检查钩子结果的固定文本**, 故只能看计数器).
+
+**探针**: `PROBE OK`; 6 个 restriction 全部可达; 实测 benefit 5.45% / passive 13.62% /
+triggered 80.93% (200 seeds x 60 slots).
+
+### 两个已修 bug (修在 build #2, 已部署)
+
+**BUG 1 `ApplyEnemyStrengthAsync(owner)` 是死代码**: `AfterRoomEntered` 里传入 `Resolve("room_entered")`
+的返回值, 而 `Resolve` 在 `definition?.Trigger is null` 时返回 `(null,null,null)` --
+`enemy_strength_gain` 是**被动**词条(无 trigger), 故 `owner` 恒为 null, 函数在
+`owner?.Creature?.CombatState is null` 处直接 return. 加上 `AfterCreatureAddedToCombat` 只在
+**战斗中新增生物**时触发, 该词条在正常战斗**永不生效**, 而其文本承诺"敌人进入战斗时获得力量".
+修法: 改为传 `Owner` 并前移到 `Resolve` 之前.
+
+**BUG 2 `_wasOwnerPartOfLastPlayerTurn` 惰性且注释错误**: (a) 赋值在 `effects is null` 提前返回
+**之后**, 被动型 `extra_turn` 遗物根本到不了; (b) 该字段**只会被赋 true, 从不赋 false**, 故
+`!_wasOwnerPartOfLastPlayerTurn` 永不为真; (c) 注释里"引擎禁止 turn-1 额外回合"的说法**是反的**.
+对照引擎 `PaelsEye.cs` 的真实实现: `AfterSideTurnStart` 在 `side == Owner.Creature.Side` 且
+`!UsedThisCombat` 时, 按 `participants.Contains(Owner.Creature)` 分别置 **true / false** --
+即有 false 分支, 且**每个**玩家回合(含第 1 回合)都执行.
+修法: 移到 trigger 提前返回**之前**, 并补上引擎的 false 分支
+(`_wasOwnerPartOfLastPlayerTurn = participants.Contains(Owner.Creature)`).
+
+`ApplyEnemyStrengthAsync` 的修复已逐行对照引擎 `PhilosophersStone.cs` 确认一致: 同一个
+`AfterRoomEntered`(战斗开始名册) + `AfterCreatureAddedToCombat`(战斗中新增) 双钩子, 同样的
+`GetOpponentsOf().Where(IsAlive)` 目标集与 `ThrowingPlayerChoiceContext`.
+
+### 未闭环 (不得含糊)
+
+- **enemy_strength 词条的实机验证尚未做**: build #2 已部署到两个副本(md5 `f1781942`, 三处一致),
+  游戏已用 build #2 启动, 但**尚未进战斗**确认敌人真的获得力量. 这是本任务唯一未闭环的验收项.
+- 两个 bug 修复的**规则正确性**依据是引擎反编译 + 执行器源码, 无实机反证.
+- **工坊文案必须先改再推送**: `workshop_upload.vdf` 的描述与 changenote 仍写着
+  "出现率比均匀采样高 40%(权重 140 比 100)" / "weight 140 vs 100", 而 v5 已删除 `DownsideWeight`.
+  推送前必须改写, 否则 item 描述的是它已不具备的行为.

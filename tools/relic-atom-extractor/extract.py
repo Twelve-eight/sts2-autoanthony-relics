@@ -13,10 +13,17 @@ Relics we deliberately REFUSE to atomise (marked GenerationEligible=false):
   * bodies using [SavedProperty]  - they carry per-run state the atom model
     cannot express, and recombining them would silently drop that state;
   * bodies we cannot reduce to a known command (custom card transforms,
-    reward screens, potion procurement) - inventing an opcode for them would
-    be inventing semantics.
+    reward screens) - inventing an opcode for them would be inventing
+    semantics.
 
 Refusing is the honest outcome. A wrong atom is worse than no atom.
+
+POLICY REVERSAL (user order 2026-09-17): the Ancient relic QUERY hooks are
+now atomised (see QUERY_HOOKS). The earlier refusal covered "potion
+procurement" by name; that is reversed because ShouldProcurePotion and its
+siblings are named engine hooks whose bodies return one fully determined
+answer, so their opcode is the hook's own name rather than an invented
+semantics. The reversal is recorded in DEVELOP.md, not silently applied.
 
 Usage: python extract.py [--out FILE] [--report]
 """
@@ -26,7 +33,7 @@ import re
 import sys
 from collections import Counter
 
-SRC = r"G:/omp works/sts2-spire1/research/engine-dllsrc/MegaCrit.Sts2.Core.Models.Relics"
+SRC = r"G:/omp works/Sts/sts2-spire1/research/engine-dllsrc/MegaCrit.Sts2.Core.Models.Relics"
 
 # --- event hook -> trigger kind -------------------------------------------
 # Only hooks that can fire repeatedly (or once) and carry a self-contained
@@ -92,6 +99,61 @@ MODIFIER_OPCODE = {
     "ModifyDamage": "modify_damage",
 }
 
+# --- restriction / benefit hooks -> (opcode, variant) ---------------------
+# POLICY REVERSAL (user order 2026-09-17). The module docstring above used to
+# say that bodies reducible to no known command - it named potion procurement
+# verbatim - are refused, because inventing an opcode for them would be
+# inventing semantics. That decision is now reversed for the Ancient relic
+# hooks below: each one IS a named engine hook with a body that reads as a
+# single, fully determined answer, so the opcode is not invented, it is the
+# hook's own name. The refusals that remain are the ones where the body
+# genuinely cannot be reduced (custom transforms, RNG target selectors).
+#
+# These hooks are "may I?" queries or multiplicative modifiers rather than
+# engine commands, so they contain no Cmd call and the command scanner above
+# cannot see them. Values are still best-effort here; the ledger hand-verifies
+# every emitted atom (value, polarity, target, condition).
+#
+# KEYED BY (relic, hook), NOT by hook alone. A hook name is not a semantics:
+# TryModifyCardRewardOptionsLate has nine implementors in the engine
+# (FresnelLens / FrozenEgg / MoltenEgg / ToxicEgg / WingCharm enchant a card
+# type, SilverCrucible upgrades, Glitter / SilkenTress apply Glam), and
+# ModifyCardRewardCreationOptions is implemented by non-Ancient relics with
+# unrelated pool rules. A hook-name-keyed table would label all of them with
+# one variant and bake the mislabels into the "reproducible" output.
+#
+# ModifyMaxEnergy / ModifyHandDraw / ModifyCardPlayCount are deliberately
+# ABSENT: the modifier scanner above already emits them, and a second entry
+# would double-count one hook.
+QUERY_HOOKS = {
+    # --- restriction-type downsides ---
+    ("Ectoplasm", "ModifyGoldGained"): ("restrict_gold", "zero"),
+    ("Sozu", "ShouldProcurePotion"): ("restrict_potion", "block"),
+    ("VelvetChoker", "ShouldPlay"): ("restrict_card_play", "cap"),
+    ("Fiddle", "ShouldDraw"): ("restrict_draw", "block"),
+    ("PhilosophersStone", "AfterCreatureAddedToCombat"): ("enemy_strength_gain", "strength"),
+    ("SpikedGauntlets", "TryModifyEnergyCostInCombat"): ("modify_card_cost", "power"),
+    # --- pure benefits ---
+    ("RunicPyramid", "ShouldFlush"): ("retain_hand", "always"),
+    ("PaelsEye", "ShouldTakeExtraTurn"): ("extra_turn", "always"),
+    ("PrismaticGem", "ModifyCardRewardCreationOptions"): ("expand_card_pool", "character"),
+    ("Glitter", "TryModifyCardRewardOptionsLate"): ("enchant_reward", "glam"),
+}
+
+# Registered query hooks whose relic carries [SavedProperty] per-run counters.
+# The atom model cannot express those counters (TreasureRoomsEntered, IsUsedUp,
+# Cooldown, IsUsed, KindleCount), so emitting the hook as a state-free affix
+# would promise behaviour the engine gates on state we do not track. They are
+# named here so the exclusion is explicit and auditable rather than an
+# accident of the saved-state drop.
+QUERY_HOOKS_STATEFUL = {
+    ("SilverCrucible", "ShouldGenerateTreasure"),
+    ("WingedBoots", "ShouldAllowFreeTravel"),
+    ("PaelsLegion", "ModifyBlockMultiplicative"),
+    ("SilkenTress", "TryModifyCardRewardOptionsLate"),
+    ("PumpkinCandle", "ModifyMaxEnergy"),
+}
+
 # --- engine command -> (opcode, variant resolver) -------------------------
 # variant is resolved from the generic argument or the call shape.
 POWER_KIND_RE = re.compile(r"PowerCmd\.Apply<(\w+)>")
@@ -103,6 +165,15 @@ def power_variant(power: str) -> tuple[str, str]:
     if p.endswith("Power"):
         p = p[: -len("Power")]
     return "apply_power", p.lower()
+
+
+def snake_case(name: str) -> str:
+    """PascalCase type argument -> snake_case variant.
+
+    CurseOfTheBell -> curse_of_the_bell, matching the variant names the
+    executor's CurseTypes table keys on.
+    """
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
 # --- condition patterns ----------------------------------------------------
@@ -199,6 +270,11 @@ METHOD_RE = re.compile(
     r"public override (?:async )?Task (\w+)\s*\(([^)]*)\)\s*\{", re.M)
 MODIFIER_METHOD_RE = re.compile(
     r"public override (?:decimal|int|bool) (Modify\w+)\s*\(([^)]*)\)\s*\{", re.M)
+# Query hooks return a decision or a replacement object and may be expression
+# bodied; the return type varies (bool / int / decimal / ActMap /
+# CardCreationOptions), so the name is the only stable anchor.
+QUERY_METHOD_RE = re.compile(
+    r"public override (?:[\w\.<>\?\[\]]+) (\w+)\s*\(([^)]*)\)\s*(?:\{|=>)", re.M)
 CMD_CALL_RE = re.compile(r"await (\w+Cmd)\.(\w+)(<(\w+)>)?")
 
 
@@ -230,6 +306,12 @@ def process(path: str) -> tuple[list[dict], dict]:
     for m in METHOD_RE.finditer(text):
         hook = m.group(1)
         body = method_body(text, text.index("{", m.end() - 1))
+        if (name, hook) in QUERY_HOOKS:
+            # Registered as a query hook (see QUERY_HOOKS). The event scanner
+            # would misread it: PhilosophersStone.AfterCreatureAddedToCombat
+            # applies Strength to the ENEMY, while the command scanner defaults
+            # the target to self. The query scanner owns this hook.
+            continue
         if hook not in HOOK_TRIGGER:
             rejected.append(f"{hook}:unmapped_hook")
             continue
@@ -245,6 +327,10 @@ def process(path: str) -> tuple[list[dict], dict]:
             opcode = variant = None
             if cmd == "PowerCmd" and method == "Apply" and generic:
                 opcode, variant = power_variant(generic)
+            elif (cmd, method) == ("CardPileCmd", "AddCurseToDeck") and generic:
+                # The curse card is the generic argument, so it IS the variant
+                # (Greed -> greed). The ledger verifies it per source relic.
+                opcode, variant = "add_curse", snake_case(generic)
             elif (cmd, method) in {
                 ("CreatureCmd", "GainBlock"),
                 ("CreatureCmd", "Damage"),
@@ -255,6 +341,7 @@ def process(path: str) -> tuple[list[dict], dict]:
                 ("PlayerCmd", "GainStars"),
                 ("PlayerCmd", "GainGold"),
                 ("PlayerCmd", "GainMaxPotionCount"),
+                ("PlayerCmd", "LoseGold"),
                 ("CardPileCmd", "Draw"),
                 ("OstyCmd", "Summon"),
                 ("OrbCmd", "Channel"),
@@ -269,6 +356,7 @@ def process(path: str) -> tuple[list[dict], dict]:
                     ("PlayerCmd", "GainStars"): "gain_stars",
                     ("PlayerCmd", "GainGold"): "gain_gold",
                     ("PlayerCmd", "GainMaxPotionCount"): "gain_max_potion",
+                    ("PlayerCmd", "LoseGold"): "lose_gold",
                     ("CardPileCmd", "Draw"): "draw_cards",
                     ("OstyCmd", "Summon"): "summon_osty",
                     ("OrbCmd", "Channel"): "channel_orb",
@@ -318,6 +406,35 @@ def process(path: str) -> tuple[list[dict], dict]:
             "Spec": {
                 "Opcode": opcode,
                 "Variant": "passive",
+                "Target": "self",
+                "Values": ([{"Id": "amount", "BaseValue": amount,
+                             "Source": "fixed", "Offset": 0,
+                             "Upgradable": False}]
+                           if found else []),
+                "Condition": ({"Kind": k} if (k := extract_condition(body)) else None),
+                "Trigger": None,
+            },
+        })
+
+    # --- restriction / benefit query hooks ---
+    # These return a value instead of awaiting a Cmd, so the command scanner
+    # above cannot see them. Keyed by (relic, hook): a hook name alone is not a
+    # semantics (see QUERY_HOOKS). The event scanner already skips every
+    # registered pair, so a hook cannot emit two atoms under two opcodes.
+    for m in QUERY_METHOD_RE.finditer(text):
+        hook = m.group(1)
+        if (name, hook) not in QUERY_HOOKS:
+            continue
+        body = method_body(text, text.index("{", m.end() - 1))
+        opcode, variant = QUERY_HOOKS[(name, hook)]
+        amount, found = extract_amount(text, body)
+        atoms.append({
+            "Id": f"{name}#{hook}",
+            "Source": name,
+            "Rarity": rarity,
+            "Spec": {
+                "Opcode": opcode,
+                "Variant": variant,
                 "Target": "self",
                 "Values": ([{"Id": "amount", "BaseValue": amount,
                              "Source": "fixed", "Offset": 0,
