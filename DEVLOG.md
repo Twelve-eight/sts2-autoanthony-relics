@@ -728,7 +728,7 @@ P1 AAR-R4-01: 新 CombatScopedOpcodes guard 没有修生成上下文. 20 个固�
 
 验证: Release 0/0; relic-probe 42 项 PASS + PROBE OK; content 已重同步(dll 43bbcedf), changenote 增补策略句, VDF 校验通过. 0.1.6 仍未推工坊, 本次与下行词条池/文本重组合并为一次发布.
 
-## 2026-09-17 v0.1.7 (未提交): 先古限制类词条入池 + 取消负面权重加成 + 纯增益 5% 门控
+## 2026-09-17 v0.1.7 (已提交 9dd7a80, 已推送): 先古限制类词条入池 + 取消负面权重加成 + 纯增益 5% 门控
 
 用户指令 (三条, 顺序到达):
 1. 把先古(Ancient)遗物的限制类负面补进词条池 -- "全做", 要求把限制类钩子全部列出后**按极性分池**;
@@ -820,11 +820,36 @@ triggered 80.93% (200 seeds x 60 slots).
 `AfterRoomEntered`(战斗开始名册) + `AfterCreatureAddedToCombat`(战斗中新增) 双钩子, 同样的
 `GetOpponentsOf().Where(IsAlive)` 目标集与 `ThrowingPlayerChoiceContext`.
 
+### BUG 3 (修在 9dd7a80): `BeforeSideTurnEndEarly` 少了引擎的第 4 个守卫
+
+复审额外回合记账时发现: `BeforeSideTurnEndEarly` 只检查了 `PaelsEye` 四个守卫中的三个,
+漏掉 `!WasOwnerPartOfLastPlayerTurn`, 而它的 doc 注释却写着"Guard set mirrors
+PaelsEye.cs:110-121 exactly". 该断言在字段恒为 true 时无害, 但 **BUG 2 的修复让这个字段
+真的可以为 false**(多人局中被强制跳过回合的玩家), 于是这个钩子会烧掉那个玩家的手牌, 而
+`ShouldTakeExtraTurn` 会正确地拒绝给予额外回合 -- 纯亏损, 且与兄弟钩子自相矛盾.
+修法: 补上该守卫, 注释与代码一致.
+
+### 工坊文案 (已在 9dd7a80 改写, 不再是阻塞项)
+
+v5 删除了 `DownsideWeight`, 而 `workshop_upload.vdf` 的描述与 changenote 仍写着
+"出现率比均匀采样高 40%(权重 140 比 100)" / "weight 140 vs 100". 已改写:
+描述改为"均匀抽取, 无概率加成", 并补上先古限制词条(必定与配对增益同体)与纯增益 5% 门控;
+changenote 前置 v0.1.7 条目, v0.1.6 原文作为历史保留(其 weight-140 句子描述的是 v0.1.6, 正确).
+版本 0.1.6 -> 0.1.7.
+
+**改写时的坑(值得记住)**: 用 ASCII 双引号写 `"no gold"` / `"+1 Energy"` 会**提前终止 VDF 字符串**,
+描述被静默截断(3563 -> 1056 字符)而编辑器里看不出问题. 中文段有同样缺陷. 两处改用全角引号后,
+`check-vdf.py` 报 `balanced+paired: True`, 8 个键值对, description 4222 / changenote 3663 均正常解析.
+检查器的 `changenote starts v0.1.6` 断言现在必然为 False(它钉的是旧前缀), 属预期, 不是故障.
+
 ### 未闭环 (不得含糊)
 
-- **enemy_strength 词条的实机验证尚未做**: build #2 已部署到两个副本(md5 `f1781942`, 三处一致),
-  游戏已用 build #2 启动, 但**尚未进战斗**确认敌人真的获得力量. 这是本任务唯一未闭环的验收项.
-- 两个 bug 修复的**规则正确性**依据是引擎反编译 + 执行器源码, 无实机反证.
-- **工坊文案必须先改再推送**: `workshop_upload.vdf` 的描述与 changenote 仍写着
-  "出现率比均匀采样高 40%(权重 140 比 100)" / "weight 140 vs 100", 而 v5 已删除 `DownsideWeight`.
-  推送前必须改写, 否则 item 描述的是它已不具备的行为.
+- **enemy_strength 词条的实机验证尚未做**: 这是本任务唯一未闭环的验收项. 当前运行的实例
+  (副本 A, 进程 9480, 启动于 10:27)加载的是 build #2(`f1781942`, 含 BUG 1/2 修复), 但
+  **尚未进战斗**确认敌人真的获得力量. 副本 B 已收到 9dd7a80 的载荷(`7fd5d728`), 副本 A 仍锁在
+  build #2(游戏占用 DLL, 无法覆盖).
+- **副本 A 落后 9dd7a80**: 它没有 BUG 3 的守卫修复. 需在游戏退出后补部署.
+- 三个 bug 修复的**规则正确性**依据是引擎反编译 + 执行器源码, 无实机反证.
+- **自动化边界**: 用户占用前台时(如打 CS2)不抢焦点. 已验证 `PostMessage` 可在**不抢焦点**下
+  驱动键盘(控制台开关/命令发送均成功), 且 `PrintWindow(.., 2)` 可后台截图; 但**鼠标按键对 Godot
+  无效**(悬停生效, 按键被忽略), 因此纯后台无法点击 UI. 需点击的验证只能在用户空闲时做.
