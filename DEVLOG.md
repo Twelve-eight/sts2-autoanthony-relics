@@ -849,21 +849,35 @@ changenote 前置 v0.1.7 条目, v0.1.6 原文作为历史保留(其 weight-140 
   -> 进 Act 1 BOSS 战(THE_KIN_BOSS). 三个敌人血条下方**都有红色剑图标 + 数值 1**(力量 1),
   同时能量读数为 **4**(基础 3 + 配对 offset +1). 即限制类词条与配对增益**两半都生效**.
   修复前该词条在正常战斗**永不生效**(owner 取自只对 trigger 生效的查找, 被动词条恒为 null).
-- **extra_turn 路径已实机验证通过 (2026-09-17, 副本 A, 构建 `29bade36`)** -- 单人局即可测,
-  不需要双人局:
-  - **BUG 2/3 的正向路径**: 开局 -> `relic add RELIC013`(slot 13 "Scrambled Medallion" =
-    打出 0 张牌则获得额外回合) -> 第 1 回合**不打任何牌**直接结束回合. 引擎日志出现
-    `Player 1 (IRONCLAD) is taking an extra turn`; 手牌从 5 张换成全新 5 张, 而**弃牌堆计数为 0**
-    (抽牌堆 6 -> 1). 弃牌堆为 0 是判别关键: 普通结束回合会把旧手牌放进弃牌堆(应为 5), 实际为 0,
-    说明旧手牌被 `BeforeSideTurnEndEarly` **烧毁**. 即 BUG 2 的 flag 在单人局正确为 true(额外回合
-    正常授予), BUG 3 补上的第 4 个守卫**未误伤**单人局.
-  - **BUG 4 的拒绝路径**: 同局 `relic add WHISPERING`(WhisperingEarring)后进新战斗. 该遗物在
-    第 1 回合自动打出至多 13 张牌(截图确认敌人已受 18 伤害), 全部 `IsAutoPlay`; 结束第 1 回合后
-    引擎直接进 `turn 2 started`, **没有**新的 `is taking an extra turn` 日志 -- 即额外回合被正确
-    拒绝. 若缺 `AnyCardsPlayedThisTurn` 的 WhisperingEarring 子句, 历史检查会因全是 auto-play 而
-    返回 false, 从而误给额外回合.
-- **仍未验证**: BUG 2 的**多人强制跳过分支**(`_wasOwnerPartOfLastPlayerTurn = false` 那条路径)
-  需要双人局才能触发 -- 这是本轮唯一真正需要联机的项.
+- **extra_turn 词条端到端可用 -- 已实机验证 (2026-09-17, 副本 A, 构建 `29bade36`)**, 单人局:
+  `relic add RELIC013`(slot 13 "Scrambled Medallion" = 打出 0 张牌则获得额外回合), 第 1 回合
+  **不打任何牌**直接结束. 引擎日志 `Player 1 (IRONCLAD) is taking an extra turn`, 手牌被重新抽取.
+  即该词条端到端可授予额外回合.
+
+  **这次测试不能区分修复前后**: 单人局里 `_wasOwnerPartOfLastPlayerTurn` 修复前后**同为 true**
+  (无强制跳过分支), BUG 3 补的第 4 个守卫在 flag=true 时**恒不触发**, BUG 4 的子句在没有
+  WhisperingEarring 时**根本不参与**. 所以它证明的是"extra_turn 词条端到端可用", **不是**
+  "BUG 2/3 已验证".
+
+  **未证实的细节(不要当成结论)**: 我起初据"弃牌堆计数为 0"推断旧手牌被
+  `BeforeSideTurnEndEarly` 烧毁, 该推断**已被自己的对照否证** -- 之后打出一张牌(敌人 27->17,
+  能量 4->3, 手牌 4->3), 同一个计数器**仍读 0**, 说明它不是我以为的弃牌堆. 手牌去向(烧毁 vs
+  弃置)**目前无可靠证据**, 且该细节不承重: BUG 3 的守卫在 flag=true 时不会触发, 烧毁与否只反映
+  既有的 Pael's Eye 镜像行为, 与本轮 4 个修复无关.
+
+- **BUG 4 的区分性证据 -- 已取得**: 同一局内做天然对照(同遗物、同 flag 状态, 唯一变量是
+  WhisperingEarring 是否打牌):
+  - 第 1 回合: WhisperingEarring 自动打牌(截图确认敌人已受 18 伤害), 结束回合后
+    **没有**额外回合(日志 18433 `turn 1` -> 18451 `turn 2`, 中间无 `extra turn` 行).
+  - 第 2 回合: **未打任何牌**(无自动打牌), 结束回合后**给出**额外回合(日志 18452
+    `is taking an extra turn`).
+  同一局的这个差异排除了"flag 恒 true 所以看不出差别": 若缺 `AnyCardsPlayedThisTurn` 的
+  WhisperingEarring 子句, 第 1 回合的历史检查会因全是 auto-play 而返回 false, 从而**误给**额外
+  回合; 实际第 1 回合不给、第 2 回合给, 正是子句生效的形状.
+
+- **BUG 2 的 false 分支与 BUG 3 的守卫仍未验证**: 两者的差异都只在
+  `_wasOwnerPartOfLastPlayerTurn = false` 时显现, 而该状态**只能由多人局的强制跳过产生**
+  (单人局恒为 true). 需要双人局 -- 这是本轮唯一真正需要联机的项.
 - 副本 A 与副本 B 均已部署 `29bade36`, 三处(构建/副本A/副本B)md5 一致.
 - **自动化边界**: 用户占用前台时(如打 CS2)不抢焦点. 已验证 `PostMessage` 可在**不抢焦点**下
   驱动键盘(控制台开关/命令发送均成功), 且 `PrintWindow(.., 2)` 可后台截图; 但**鼠标按键对 Godot
