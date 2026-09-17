@@ -684,6 +684,14 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         {
             return;
         }
+        // The engine's fourth guard. Since the BUG 2 fix this flag can genuinely
+        // be false (a multiplayer player forced to skip their turn), and without
+        // it this hook would burn that player's hand while ShouldTakeExtraTurn
+        // correctly refuses the turn - a pure loss, inconsistent with the sibling.
+        if (!_wasOwnerPartOfLastPlayerTurn)
+        {
+            return;
+        }
         try
         {
             foreach (CardModel card in PileType.Hand.GetPile(owner).Cards.ToList())
