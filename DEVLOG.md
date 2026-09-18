@@ -1186,7 +1186,7 @@ MainFile 的初始化日志(`seedVersion=relics-v7`),**日志从此可归因到�
 - `variety: most seeds draw only a subset of the restriction pool (not all of it)`
 - `variety: no two seeds share most of their relic descriptions`
 
-**并已证明它们在修复前会 FAIL**(把代码临时回退到 v6 实测):
+**并已实测它们在修复前的行为**(把代码临时回退到 v6): **只有 2 条真正判别本缺陷**, 另 2 条在 v6 下也 PASS --
 
 ```
 FAIL  variety: no relic description is present in every seed  7 constant: Power cards cost 1 more...
@@ -1194,7 +1194,17 @@ FAIL  variety: most seeds draw only a subset of the restriction pool   1/72 (1%)
 PROBE FAILED: 2 check(s)
 ```
 
-修复后 4 条全 PASS.这才是真正的回归护栏.
+| 断言 | v6(修复前) | 判别力 |
+|---|---|---|
+| `no relic description is present in every seed` | **FAIL** (7 条恒定) | **判别** |
+| `most seeds draw only a subset of the restriction pool` | **FAIL** (1/72) | **判别** |
+| `no relic name is present in every seed` | PASS | 不判别 |
+| `no two seeds share most of their relic descriptions` | PASS | 不判别 |
+
+后两条在 v6 下也 PASS, 原因: 名字的 tail 词素本来就随种子变化(v6 的名字层只有**部分**被固化,
+固化的是 6 条 restriction 文本对应的那几件), 而两局共享描述在 v6 下平均 13.6/60(最差 18/60, 实测 8 真实种子), 远低于 35 的阈值.
+**必须写明这一点**: 若后人以为"名字断言"能拦住这类缺陷, 就会把一张拦不住的网当成回归护栏
+(AGENTS.md Sec 9 的诚实要求). 修复后 4 条全 PASS.
 
 **其中一条断言我自己先写错了, 已修正(记下来)**: 初版写的是 `restrictionCounts.Max() < 6`,
 即"不允许任何种子拿到 6 个 restriction". 这是**假不变式** -- 6 是 v7 的**合法**结果
