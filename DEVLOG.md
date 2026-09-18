@@ -1166,7 +1166,11 @@ if (pairs.Count > 0 && random.Next(100) < RestrictionRelicChancePercent)   // 30
 ```
 
 这**独立证实了整条链路**(种子捕获 -> 生成 -> 本地化注入)在 Steam 版上就是 v6 的行为,
-且"6 个 restriction 全出现"正是 v6 缺陷的现场.附带教训: 我因此把 `SeedVersion` 加进了
+且"6 个 restriction 全出现"正是 v6 缺陷的现场.**重要运营事实**: 该日志同时证明**用户当前仍在 Steam 版 0.1.7(修复前)游玩** --
+所以在 0.1.8 推送到工坊之前, 用户后续的实机反馈**仍会复现该缺陷**, 这不是"修复无效".
+0.1.7 的变更说明里那句"读档保留同批遗物"在跨版本时也不成立(见下文 (5)).
+
+附带教训: 我因此把 `SeedVersion` 加进了
 MainFile 的初始化日志(`seedVersion=relics-v7`),**日志从此可归因到具体构建**.
 
 ### 三条**成立**的 advisory (已处置)
@@ -1179,18 +1183,26 @@ MainFile 的初始化日志(`seedVersion=relics-v7`),**日志从此可归因到�
 
 - `variety: no relic description is present in every seed`
 - `variety: no relic name is present in every seed`
-- `variety: restriction-relic count varies by seed (not pinned at the pool size)`
+- `variety: most seeds draw only a subset of the restriction pool (not all of it)`
 - `variety: no two seeds share most of their relic descriptions`
 
 **并已证明它们在修复前会 FAIL**(把代码临时回退到 v6 实测):
 
 ```
 FAIL  variety: no relic description is present in every seed  7 constant: Power cards cost 1 more...
-FAIL  variety: restriction-relic count varies by seed          counts=[6,6,6,6,6,6,6,6] distinct=1
+FAIL  variety: most seeds draw only a subset of the restriction pool   1/72 (1%) below the pool size 6
 PROBE FAILED: 2 check(s)
 ```
 
 修复后 4 条全 PASS.这才是真正的回归护栏.
+
+**其中一条断言我自己先写错了, 已修正(记下来)**: 初版写的是 `restrictionCounts.Max() < 6`,
+即"不允许任何种子拿到 6 个 restriction". 这是**假不变式** -- 6 是 v7 的**合法**结果
+(68 种子直方图里 `6->5`), 它当时通过纯粹是因为那 8 个真实种子恰好 max=5. 一旦扩池/改账本
+使这 8 个种子的流发生位移, 它就会**假报警**, 把人指向门控而实际什么都没坏.
+改成"**多数种子不取满整个 restriction 池**"(`belowPoolShare >= 0.5`), 在更宽的 72 个种子上度量:
+v6 = 1/72 (1%) -> FAIL, v7 = 63/68 (93%) -> PASS. 这才是能区分修复与未修复的判据.
+教训: 断言必须写在**分布**上, 且不得把某个**合法取值**排除掉.
 
 **(2) 效果词表跨种子高度复用 -- 成立,但**不是**本轮缺陷,且不是代码能修的.**
 

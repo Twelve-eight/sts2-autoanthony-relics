@@ -341,13 +341,32 @@ internal static class Program
             "variety: no relic name is present in every seed",
             constantNames.Count == 0 ? "0 of 60" : $"{constantNames.Count}: {string.Join(" | ", constantNames.Take(3))}");
 
-        // (b) The restriction count must SPREAD, not pin at the pool size. v6
-        // took the restriction branch whenever any remained, so the count was 6
-        // in 67 of 68 seeds - a per-run constant, which is what the players saw.
-        int distinctRestrictionCounts = restrictionCounts.Distinct().Count();
-        Check(distinctRestrictionCounts >= 3 && restrictionCounts.Max() < 6,
-            "variety: restriction-relic count varies by seed (not pinned at the pool size)",
-            $"counts=[{string.Join(",", restrictionCounts)}] distinct={distinctRestrictionCounts}");
+        // (b) A run must not take EVERY restriction fragment. v6 took the branch
+        // whenever any remained, so the count equalled the pool size in 67 of 68
+        // seeds - that is what the players saw.
+        //
+        // The invariant is "most seeds do not draw the whole restriction pool",
+        // NOT "the count is never the pool size" and NOT "the count varies": 6 is
+        // a legal v7 outcome (the 68-seed histogram has 5 seeds at 6), and a
+        // `Max() < 6` cap would be a false invariant that passes on these 8 seeds
+        // by luck and then fails spuriously when a pool/ledger change shifts the
+        // streams. Likewise `distinct > 1` alone is too weak - it is satisfied by
+        // v6, which yields distinct=2 once a single seed happens to fall short.
+        // Measured: v6 = 1/68 seeds below the pool size (1.5%); v7 = 63/68 (93%).
+        int poolRestrictionFragments = pool.PassiveEffects.Count(e => e.IsRestriction);
+        var restrictionCountsWide = new List<int>(restrictionCounts);
+        for (int i = 0; i < 64; i++)
+        {
+            var defs = RelicGenerator.Generate($"variety-restriction-{i}", pool);
+            restrictionCountsWide.Add(defs.Count(d => d.Effects.Any(e => e.IsRestriction)));
+        }
+        int belowPool = restrictionCountsWide.Count(c => c < poolRestrictionFragments);
+        double belowPoolShare = belowPool / (double)restrictionCountsWide.Count;
+        Check(belowPoolShare >= 0.5,
+            "variety: most seeds draw only a subset of the restriction pool (not all of it)",
+            $"{belowPool}/{restrictionCountsWide.Count} ({100 * belowPoolShare:F0}%) below the pool size " +
+            $"{poolRestrictionFragments}; real-8=[{string.Join(",", restrictionCounts)}] " +
+            $"wide min={restrictionCountsWide.Min()} max={restrictionCountsWide.Max()}");
 
         // (c) Two runs must not share most of their content. Measured 12.9% after
         // the fix; the pre-fix vocabulary reuse made the player perceive one set.
