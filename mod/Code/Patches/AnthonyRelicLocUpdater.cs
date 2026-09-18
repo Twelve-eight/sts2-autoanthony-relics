@@ -19,8 +19,12 @@ namespace AutoAnthonyRelics.Patches;
 /// Fix: whenever the run seed is captured (new run or save load), rewrite the
 /// "relics" loc-table entries for all 60 slots from the LIVE definitions -
 /// same reflection into LocTable._translations that BaseLib itself uses.
-/// Dedupe key = seed + fragment-pool fingerprint: if the definitions ever
-/// change without the seed changing, the table must follow.
+/// Dedupe key = seed + fragment-pool fingerprint + generation settings: if the
+/// definitions ever change without the seed changing, the table must follow.
+/// The settings component is required because they are generation inputs (the
+/// extra-pool toggle and the pool weights), so a settings edit changes the
+/// definitions while the seed stays put - the exact case this key exists to
+/// catch. It mirrors AnthonyRelicRunRegistry's definition-cache key.
 /// </summary>
 internal static class AnthonyRelicLocUpdater
 {
@@ -39,7 +43,8 @@ internal static class AnthonyRelicLocUpdater
                 _lastKey = null;
                 return;
             }
-            string cacheKey = seed + " " + MainFile.FragmentPool.Fingerprint;
+            string cacheKey = seed + " " + MainFile.FragmentPool.Fingerprint
+                              + " " + Generation.GenerationSettings.Current.Key;
             if (cacheKey == _lastKey)
             {
                 return;

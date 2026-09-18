@@ -339,18 +339,24 @@ AAR 现有架构无该状态 -> **本轮不搬**, 与账本 reject 的既有理�
 
 ### 权重模型
 
-每池一个整数权重(整数, 因为 `DeterministicRandom` 只有整数 API, 且跨平台一致):
+每池一个整数权重(整数, 因为 `DeterministicRandom` 只有整数 API, 且跨平台一致).
+权重表示**各档在遗物池中的占比**, 因此只有相互比例有意义(四项同倍缩放不改变结果):
 
-| 配置键 | 默认 | 含义 |
+| 配置键 | 默认 | 作用(实现后修正: 是"档占比", 不是"池内片段权重") |
 |---|---|---|
-| `WeightTriggeredCore` | 100 | 核心池触发类片段 |
-| `WeightPassiveCore` | 100 | 核心池被动类(含 restriction) |
-| `WeightBenefitCore` | 100 | 核心池纯增益被动 |
-| `WeightExtra` | 100 | 额外池(开关打开时) |
+| `WeightTriggeredCore` | 100 | 触发档的占比(默认 80) |
+| `WeightPassiveCore` | 100 | 被动档的占比(默认 15) |
+| `WeightBenefitCore` | 100 | 增益档的占比(默认 5) |
+| `WeightExtra` | 100 | 额外池相对核心池的贡献; **同时**作用于触发档内部 |
 
-接入点唯一: `RelicGenerator.WeightOf(EffectFragment)`(`:852`)目前返回常量 `NormalWeight`,
-`PickWeightedUniquely`(`:804`)已完整支持 `Func<T,int> weightOf`, 包括
-`totalWeight > 0` 分支与 `roll < accumulated` 累加. **只需让 `WeightOf` 按片段的池归属查表.**
+接入点: `RelicGenerator.PickBand(random, settings)` 把三个基础概率
+(`BenefitRelicChancePercent` / `PassiveRelicChancePercent` / 余量)按各自权重缩放后
+转成阈值. 触发档的基础值是"余量"而非固定的 80, 所以其权重缩放的是余量.
+
+`RelicGenerator.WeightOf` 仍然存在, 但**只**对触发档有意义: `pool.TriggeredEffects`
+真正混了核心与额外片段, 所以 `WeightExtra` 在那里起作用. 被动档与增益档内部**权重同质**
+(`BenefitEffects` 全带 `WeightBenefitCore`, `PassiveEffects` 全带 `WeightPassiveCore`),
+对它们做加权抽取在算术上等同均匀抽取 -- 这正是初版两个滑块失效的原因.
 
 关键约束(**实现后修正**): `PickWeightedUniquely` 每次**抽取**无论权重如何都恰好消耗
 一次 `random.Next(..)`, 所以权重不改单次抽取的成本. 但它**会**改变总抽取次数 --

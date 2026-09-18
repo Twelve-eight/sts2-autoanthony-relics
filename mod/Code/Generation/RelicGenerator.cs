@@ -229,22 +229,37 @@ public static class RelicGenerator
         int passiveThreshold;
         if (total <= 0)
         {
-            // Every weight is zero: weights cannot steer anything, so use the
-            // shipped base rates rather than emitting one fixed band.
+            // Every weight is zero: no band has any preference, so the weights
+            // carry no information at all and the only non-arbitrary choice is
+            // the shipped base rates. Pinned by the probe's all-zero assertion so
+            // this stays a decision rather than an accident of two guards.
             benefitThreshold = BenefitRelicChancePercent;
             passiveThreshold = BenefitRelicChancePercent + PassiveRelicChancePercent;
         }
         else
         {
-            benefitThreshold = (int)(100L * sBenefit / total);
-            passiveThreshold = (int)(100L * (sBenefit + sPassive) / total);
+            // Thresholds are RATIOS of the scaled weights, so only the weights'
+            // relative size matters: doubling all four leaves them unchanged.
+            //
+            // Each threshold is clamped so a NONZERO weight always keeps its band
+            // reachable. Without the clamp the 10-step sliders can silently delete
+            // a band they were set to: WeightBenefitCore=10 against 400/400 gives
+            // 100*50/38050 = 0, i.e. the benefit band vanishes although the player
+            // chose a nonzero value. Clamping the cumulative threshold also keeps
+            // the two strictly increasing, so a nonzero passive weight cannot be
+            // swallowed by the benefit threshold.
+            benefitThreshold = sBenefit > 0
+                ? Math.Clamp((int)(100L * sBenefit / total), 1, 100)
+                : 0;
+            passiveThreshold = sPassive > 0
+                ? Math.Clamp((int)(100L * (sBenefit + sPassive) / total), benefitThreshold + 1, 100)
+                : benefitThreshold;
         }
-        // ALWAYS Next(100), and with the shipped weights the thresholds are
-        // exactly 5 and 20 - i.e. the pre-weight draw, byte for byte. Drawing a
-        // wider range (Next(total)) would have been the obvious encoding but it
-        // changes the default stream and, measured on 2026-09-19, pushed two
-        // descriptions back into every seed. Keeping the range fixed means the
-        // weights only move the thresholds.
+        // ALWAYS Next(100): with the shipped weights the thresholds are exactly
+        // 5 and 20, i.e. the pre-weight draw and therefore the same realization
+        // for every seed. Keeping the range fixed is what makes that true - the
+        // obvious encoding, Next(total), changes the default stream (measured
+        // 2026-09-19: it pushed two descriptions back into every seed).
         int roll = random.Next(100);
         if (roll < benefitThreshold)
         {

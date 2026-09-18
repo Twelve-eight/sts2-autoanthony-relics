@@ -524,6 +524,56 @@ internal static class Program
         CheckBandWeight("benefit", baseBenefit, basePassive, baseTriggered, pool,
             () => GenerationSettingsTest.Set(weightBenefit: 0), band: 0);
 
+        // A NONZERO weight must keep its band reachable, however lopsided the
+        // ratio. Integer threshold division truncates, so before the clamp a
+        // slider at its lowest nonzero step (10, the slider granularity) against
+        // 400/400 produced a threshold of 0 and DELETED a band the player had
+        // explicitly set - a silent failure the zero-weight checks cannot see
+        // (they only ever use 0 or the default).
+        foreach ((string label, Action set) skew in new (string, Action)[]
+                 {
+                     ("benefit", () => GenerationSettingsTest.Set(
+                         weightTriggered: 400, weightPassive: 400, weightBenefit: 10)),
+                     ("passive", () => GenerationSettingsTest.Set(
+                         weightTriggered: 400, weightBenefit: 400, weightPassive: 10)),
+                 })
+        {
+            int minBenefit, minPassive, minTriggered;
+            skew.set();
+            try
+            {
+                (minBenefit, minPassive, minTriggered) = CountBands(pool, 80);
+            }
+            finally
+            {
+                GenerationSettingsTest.Reset();
+            }
+            int reachable = skew.Item1 == "benefit" ? minBenefit : minPassive;
+            Check(reachable > 0,
+                $"weight: a minimal NONZERO '{skew.Item1}' weight keeps its band reachable",
+                $"{reachable} slots (benefit/passive/triggered={minBenefit}/{minPassive}/{minTriggered})");
+        }
+
+        // All four weights zero. This takes the total<=0 branch, which restores
+        // the shipped base rates rather than emitting one fixed band - pinned
+        // here so the semantics are a decision, not an accident of two guards.
+        // (It also means "all sliders at 0" reads as "no preference", not "stop
+        // generating", which is why the config sliders are documented as
+        // relative shares.)
+        int allZeroBenefit, allZeroPassive, allZeroTriggered;
+        GenerationSettingsTest.Set(weightTriggered: 0, weightPassive: 0, weightBenefit: 0, weightExtra: 0);
+        try
+        {
+            (allZeroBenefit, allZeroPassive, allZeroTriggered) = CountBands(pool, 80);
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        Check(allZeroBenefit > 0 && allZeroPassive > 0 && allZeroTriggered > 0,
+            "weight: all four at 0 falls back to the shipped base rates (every band still present)",
+            $"{allZeroBenefit}/{allZeroPassive}/{allZeroTriggered}");
+
         // ---- 8a5. HAND/Deck EFFECT TIMING (user order 2026-09-18).
         // The generator's rules 7 must keep hand effects off pre-draw triggers
         // and deck effects on `obtained` only. This is the check that would have
