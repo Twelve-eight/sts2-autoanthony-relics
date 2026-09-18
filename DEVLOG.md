@@ -1267,3 +1267,60 @@ v0.1.8 changenote 已显式写明这一点,并说明版本内读档才保持同�
   - 每局 distinctDesc 55-58/60(60 槽位 vs 44 效果片段的必然复用,非缺陷)
 - 实机启动(副本 A, d3d12): 9 补丁类 0 失败, 池构成不变,
   **`initialized: enabled=True, replaceVanilla=True, seedVersion=relics-v7`** -- 日志可归因.
+
+## 2026-09-18 v0.1.8 已推送工坊 (缺陷闭环)
+
+### 结果
+
+```
+[13:53:37] Upload starting for workshop item 3801304033
+[13:53:53] Uploaded new content ( ManifestID 7221203532627958162 ) for item 3801304033
+[13:53:54] Upload finished for workshop item 3801304033 : OK
+```
+
+工坊 changelog 页已出现 `v0.1.8`(此前为 `v0.1.7`),变更说明含
+"the descriptions present in EVERY run went from 7 of 60 to 0" 与跨版本重生成提示.
+
+推送前的三次前置门禁全过:
+```
+REFRESH RESULT: OK (0 refreshed, 8 already current)
+Release-content guard: no held-back layer in any staged payload.
+VDF metadata guard: no unescaped ASCII quote in any text field.
+```
+
+推送用的二进制已核验为 **v7**(三个副本 UTF-16 计数一致, 哈希 `902241e4d00e71ab`):
+```
+build    902241e4d00e71ab  v7=2  v6=0  seedVersion=1
+payload  902241e4d00e71ab  v7=2  v6=0  seedVersion=1
+E: copy  902241e4d00e71ab  v7=2  v6=0  seedVersion=1
+```
+时间线亦自洽: 源码最后一次 v7 恢复 13:50:02, 重建 13:50:12, 推送 13:53:37.
+
+### 推送过程中发现并修掉的两个**既有**脚本缺陷
+
+**(1) 单元素 `Where-Object` 没有 `.Count`, 导致单推必然误报失败.** `workshop-push-all.ps1`:
+
+```powershell
+$okCount = ($results | Where-Object { $_.Ok }).Count     # 单元素时返回标量
+```
+
+实测: `($w).Count` 为 `$null`, 而 `$null -lt 1` 为 **true** -> 一次**成功**的单推会打印
+`/1 items verified.`(`{0}` 为空)并 `exit 5`. 8 项全推时 `Where-Object` 返回数组, 所以这个
+bug 一直没暴露. 已改为 `@(...).Count`. **这是既有缺陷, 非本轮引入.**
+
+**(2) `-Only` 新增过滤器需要防歧义.** 本轮为它加了 `-Only <substring>`(只推匹配项, 其余 7 项
+在单 mod 轮次里纯属浪费 2FA 码与暴露窗口). 已加固为**必须恰好命中 1 项**:
+命中 0 项时 `$pushItems.Count` 为 0, 旧写法下 `$okCount -lt $pushItems.Count` 即 `0 -lt 0` 为假,
+会打印 "0/0 items verified." 并 `exit 0` -- **看着像成功, 实际什么都没推, 白烧一个码**.
+现为 `-ne 1` 则 `FATAL` + `exit 2` 并列出全部行名.
+三道前置门禁**仍覆盖全部 8 项**, 过滤器只收窄上传列表; 校验循环 / 通过计数 / 退出码均跟随过滤后的列表.
+
+实测选择逻辑: `-Only AAR` / `3801304033` / `0.1` 各命中 1 项; `-Only relics` / `NOPE` 命中 0 项 -> FATAL.
+
+### 关于 2FA 的两条事实(已实测)
+
+- **steamcmd 无缓存会话**: `+login <acct> <pass> +quit` 输出
+  `This account is protected by a Steam Guard mobile authenticator. Waiting for confirmation..` 后
+  `exit 5`. 该账号**必须**每次提供新的 Steam Guard 码.
+- 第一次带码推送(`VT2HT`)因我方回合超时**在登录阶段被杀**, 未上传任何内容
+  (`workshop_log.txt` 无新增 Upload 行) -- 此后改为后台任务运行, 第二次(`V2RG3`)成功.

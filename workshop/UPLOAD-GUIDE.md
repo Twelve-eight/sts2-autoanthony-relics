@@ -18,13 +18,13 @@ Option A - interactive (prompts for password + Steam Guard):
 
 ```
 cd "G:\omp works\.tooling\steamcmd"
-.\steamcmd.exe +login YOUR_STEAM_LOGIN +workshop_build_item "G:\omp works\sts2-autoanthony-relics\workshop\workshop_upload.vdf" +quit
+.\steamcmd.exe +login YOUR_STEAM_LOGIN +workshop_build_item "G:\omp works\Sts\sts2-autoanthony-relics\workshop\workshop_upload.vdf" +quit
 ```
 
 Option B - env-var pusher (from any shell with the env set):
 
 ```
-powershell -File "G:\omp works\sts2-autoanthony-relics\workshop\workshop-push.ps1" -Vdf "G:\omp works\sts2-autoanthony-relics\workshop\workshop_upload.vdf"
+powershell -File "G:\omp works\Sts\sts2-autoanthony-relics\workshop\workshop-push.ps1" -Vdf "G:\omp works\Sts\sts2-autoanthony-relics\workshop\workshop_upload.vdf"
 ```
 
 Notes:

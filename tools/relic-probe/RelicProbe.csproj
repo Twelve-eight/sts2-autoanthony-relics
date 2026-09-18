@@ -15,7 +15,7 @@
            review probe then reported the already-fixed text as still broken.
            Program.Main also self-checks binary-vs-source freshness and fails
            loudly instead of probing yesterday's code. -->
-      <HintPath>G:/omp works/sts2-autoanthony-relics/mod/.godot/mono/temp/bin/Release/AutoAnthonyRelics.dll</HintPath>
+      <HintPath>G:/omp works/Sts/sts2-autoanthony-relics/mod/.godot/mono/temp/bin/Release/AutoAnthonyRelics.dll</HintPath>
     </Reference>
     <Reference Include="sts2"><HintPath>G:/steam/steamapps/common/Slay the Spire 2/data_sts2_windows_x86_64/sts2.dll</HintPath></Reference>
     <Reference Include="BaseLib"><HintPath>G:/steam/steamapps/workshop/content/2868840/3737335127/BaseLib/BaseLib.dll</HintPath></Reference>
