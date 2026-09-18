@@ -503,9 +503,40 @@ AAR 设置全部重置, 且 6 个 AAR 键被灌进 Qurious 的 cfg.
 `GenerationSettings.Key` 的分量, 而该 Key 已在缓存键里, 所以开关切换会正确地重新生成.
 (与 v8 的权重同理, 那些权重也是经 Key 生效而没有单独 bump 版本.)
 
-**验证**: `tools/relic-probe` 4 项断言(默认确实会抽到负面; 开启后**一件都没有**;
+**已知代价(实测, 刻意接受)**: 关掉 6 个限制类后, 被动档只剩 BagOfPreparation(+2)与
+BigMushroom(-2, 也被本选项关掉), 即**只剩 1 个**可用的普通被动. `PickEligiblePassive`
+是按 `Excluded` 过滤的兜底重发(不看已用集合), 所以被动档的多样性会下降.
+40 局实测: 被动档 231 个槽位 / **6 种**不同遗物(未开启时该档有 13 种 shape).
+即**没有**塌缩成单一件(兜底重发仍会在两个可用 shape 间轮转), 但确实变单调.
+选择: 接受并记录, 不改架构 -- 玩家显式要求"不要负面效果", 用多样性换掉负面是本意;
+若要保留多样性, 正确做法是**扩充非负面被动池**, 而不是让限制类漏回来.
+
+**验证**: `tools/relic-probe` 5 项断言(默认确实会抽到负面; 开启后**一件都没有**;
+**没有任何效果带负值**(符号断言, 钉住 `modify_hand_draw` -2 这一类);
 `retain_hand` 在两种状态下都可达; 选项确实改变生成而非空转).
+符号断言是必要的: 只断言 `IsNegative` 是循环论证(属性本身写错也会通过).
 判别力验证: 把 `IsNegative` 改成"所有 benefit opcode 也算负面"(即把 `retain_hand`
 误判为负面)-> `retain_hand survives the option` FAIL (`off=1 on=0`).
 `tools/relic-eligibility-probe` 的 oracle 同步加了规则 8(直接读 `IsNegative`, 不重列 opcode,
 以免与实现漂移).
+
+### 代码审查 (2026-09-19, 全量)
+
+**修掉一个潜在的非确定性缺陷(我自己引入的类)**:
+`RelicFragments.Build` 里 `foreach (KeyValuePair<...> injection in fix.Values)` 直接迭代
+`Dictionary<string,int>`. .NET 的**字符串哈希按进程随机化**, 所以字典枚举顺序**不保证跨进程稳定**;
+该顺序会进入 `values` 顺序 -> `ValuesKey` -> 片段 Key -> 遗物 fingerprint, 即**生成输出**.
+当前账本每个 fix 只有 **1 个** value key(实测:max=1, 无多键条目), 所以暂时触发不了,
+但一旦有人加一个双键 fix, 同一 seed 在不同进程就会产出不同遗物 -- 极难归因.
+已改为 `OrderBy(kv => kv.Key, StringComparer.Ordinal)`(对现有单键数据是 no-op).
+
+**逐项核实为"正确"的(不再重复检查)**:
+- `PickBand` 算术: 对 UI 全范围(0..400 步长 10, 共 **68,921** 组三权重组合)暴力验证:
+  `Math.Clamp` 从不抛(`min > max` 会抛, 这是真实风险), 阈值恒在 [0,100] 且严格递增,
+  非零权重恒保留其档.
+- 生成层无 `GetHashCode` 调用(全仓库 grep 为空); 池组装按 `OrderBy(Ordinal)` 排序;
+  `Union` 用 `SortedSet`; `RestrictionOffsets` 只用 `ContainsKey`/`TryGetValue`(与顺序无关).
+- 跨进程确定性: 连续 3 次独立进程运行, fingerprint 与全部断言一致.
+- 良构性: 200 seeds 默认设置 + 120 seeds 开启负面开关(后者是**新增**断言 --
+  默认 soak 看不到该配置), 每个槽位 `Effects.Count > 0`, 不存在"有触发但无效果"的遗物.
+- `fix.Values` 之外无其它 Dictionary 迭代进入生成路径.

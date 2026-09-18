@@ -582,29 +582,48 @@ internal static class Program
         // regression that made everything negative would pass unnoticed). With
         // it on, NO drawn effect may be negative - and retain_hand, which is
         // explicitly not negative, must still be reachable.
+        //
+        // The assertions test BOTH IsNegative and the raw VALUE SIGN. Testing
+        // IsNegative alone would be circular: it would pass even if the property
+        // itself were wrong. The sign check is what actually pins the defect this
+        // block was written for - BigMushroom's modify_hand_draw at -2 ("少抽2张
+        // 牌") is a real cost that a purely opcode-keyed IsNegative misses.
+        //
+        // includeExtraPool is ON for the "on" run: ethereal_hand_card is the only
+        // extra-pool negative, so with the pool off rule 6 would already exclude
+        // it and rule 8 would never be exercised against it.
+        static bool SignNegative(EffectFragment e) => e.Values.Any(v => v.Value < 0);
         var negativesOff = new HashSet<string>(StringComparer.Ordinal);
-        var negativesOn = new HashSet<string>(StringComparer.Ordinal);
         var retainOff = new HashSet<string>(StringComparer.Ordinal);
+        var signNegativeOn = new List<string>();
+        var negativesOn = new HashSet<string>(StringComparer.Ordinal);
         var retainOn = new HashSet<string>(StringComparer.Ordinal);
-        for (int i = 0; i < 120; i++)
+        GenerationSettingsTest.Set(includeExtraPool: true);
+        try
         {
-            string seed = $"neg-{i}";
-            foreach (var d in RelicGenerator.Generate(seed, pool))
+            for (int i = 0; i < 120; i++)
             {
-                foreach (var e in d.Effects)
+                foreach (var d in RelicGenerator.Generate($"neg-{i}", pool))
                 {
-                    if (e.IsNegative)
+                    foreach (var e in d.Effects)
                     {
-                        negativesOff.Add(e.Key);
-                    }
-                    if (e.Opcode == "retain_hand")
-                    {
-                        retainOff.Add(e.Key);
+                        if (e.IsNegative)
+                        {
+                            negativesOff.Add(e.Key);
+                        }
+                        if (e.Opcode == "retain_hand")
+                        {
+                            retainOff.Add(e.Key);
+                        }
                     }
                 }
             }
         }
-        GenerationSettingsTest.Set(disableNegatives: true);
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        GenerationSettingsTest.Set(includeExtraPool: true, disableNegatives: true);
         try
         {
             for (int i = 0; i < 120; i++)
@@ -616,6 +635,10 @@ internal static class Program
                         if (e.IsNegative)
                         {
                             negativesOn.Add(e.Key);
+                        }
+                        if (SignNegative(e))
+                        {
+                            signNegativeOn.Add($"{e.Key} ({string.Join(",", e.Values.Where(v => v.Value < 0).Select(v => $"{v.Id}={v.Value}"))})");
                         }
                         if (e.Opcode == "retain_hand")
                         {
@@ -629,10 +652,75 @@ internal static class Program
         {
             GenerationSettingsTest.Reset();
         }
+        // MEASURE the passive-band collapse the option can cause: with the six
+        // restrictions gone, the band has only the plain passives left, and
+        // PickEligiblePassive re-serves used fragments, so the band could
+        // collapse onto one relic. Reported so the trade-off is visible rather
+        // than assumed.
+        var passiveOnDistinct = new HashSet<string>(StringComparer.Ordinal);
+        int passiveOnSlots = 0;
+        GenerationSettingsTest.Set(includeExtraPool: true, disableNegatives: true);
+        try
+        {
+            for (int i = 0; i < 40; i++)
+            {
+                foreach (var d in RelicGenerator.Generate($"neg-band-{i}", pool))
+                {
+                    if (d.Trigger is null && d.Effects.Any(e => e.IsPassive))
+                    {
+                        passiveOnSlots++;
+                        passiveOnDistinct.Add(string.Join("+", d.Effects.Select(e => e.Key)));
+                    }
+                }
+            }
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        Console.WriteLine($"  NOTE negatives-on passive slots: {passiveOnSlots} slots, " +
+                          $"{passiveOnDistinct.Count} distinct relic(s)");
         Check(negativesOff.Count > 0, "negatives: drawn by default (the option has something to remove)",
             $"{negativesOff.Count} distinct");
+        // The extra pool must be ON for this block (set above) precisely so the
+        // extra-pool negative is covered: with the pool off, rule 6 excludes
+        // ethereal_hand_card anyway and rule 8 would never be tested against it.
+        // Assert the coverage rather than assume it.
+        Check(negativesOff.Any(k => k.StartsWith("ethereal_hand_card|", StringComparison.Ordinal)),
+            "negatives: the extra-pool negative (ethereal_hand_card) is covered by this check",
+            negativesOff.Any(k => k.StartsWith("ethereal_hand_card|", StringComparison.Ordinal))
+                ? "present" : $"absent; distinct={negativesOff.Count}");
         Check(negativesOn.Count == 0, "negatives: NONE drawn when the option is on",
             negativesOn.Count == 0 ? "none" : string.Join(",", negativesOn.Take(5)));
+        Check(signNegativeOn.Count == 0, "negatives: no drawn effect has a negative VALUE either (sign case pinned)",
+            signNegativeOn.Count == 0 ? "none" : string.Join(" | ", signNegativeOn.Distinct().Take(4)));
+        // WELL-FORMEDNESS UNDER THE OPTION. The soak check runs with the DEFAULT
+        // settings, so it never sees the option's configuration - and that
+        // configuration removes fragments from the triggered pool, which is the
+        // one way a slot could end up with a trigger and ZERO effects (the
+        // generator breaks out of the pick loop on null and keeps the trigger).
+        // A relic with no effects is malformed text, so assert it here too.
+        var malformed = new List<string>();
+        GenerationSettingsTest.Set(includeExtraPool: true, disableNegatives: true);
+        try
+        {
+            for (int i = 0; i < 120; i++)
+            {
+                foreach (var d in RelicGenerator.Generate($"neg-shape-{i}", pool))
+                {
+                    if (d.Effects.Count == 0)
+                    {
+                        malformed.Add($"slot{d.Slot} trigger={d.Trigger?.Key ?? "none"}");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        Check(malformed.Count == 0, "negatives: every slot stays well-formed (no trigger with zero effects)",
+            malformed.Count == 0 ? "none" : string.Join(",", malformed.Take(4)));
         // retain_hand must be reachable in BOTH states - it is the case the user
         // called out, and a naive implementation that treated every veto-shaped
         // hook as negative would silently remove it.

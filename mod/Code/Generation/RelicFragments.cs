@@ -125,8 +125,16 @@ public sealed record EffectFragment(
     /// with +1 Energy), and <c>enemy_strength_gain</c> is
     /// PhilosophersStone's "enemies gain Strength" (paired with +1 Energy).
     /// Both are genuinely negative to their owner.
+    ///
+    /// SIGN-NEGATIVE <c>modify_hand_draw</c> IS negative. The opcode carries
+    /// both signs and polarity is per-fragment, not per-opcode:
+    /// BagOfPreparation is +2 (a benefit) while BigMushroom's ledger fix sets
+    /// amount = -2 ("少抽2张牌", a real cost - the generator's own
+    /// RestrictionOffsets comment already calls it "the -2 downside"). A purely
+    /// opcode-keyed set would have missed it, which is why this is a value test.
     /// </summary>
-    public bool IsNegative => IsDownside || IsRestriction;
+    public bool IsNegative => IsDownside || IsRestriction
+        || (string.Equals(Opcode, "modify_hand_draw", StringComparison.Ordinal) && Amount < 0);
 
     /// <summary>
     /// Extra-pool opcodes (user order 2026-09-18) whose target is the owner's
@@ -360,7 +368,19 @@ public sealed class RelicFragmentPool
             // Fix may also inject a value the extractor dropped entirely.
             if (fix.Values is not null)
             {
-                foreach (KeyValuePair<string, int> injection in fix.Values)
+                // SORTED, not raw dictionary order. `fix.Values` is a
+                // Dictionary<string,int>, and .NET randomizes string hash codes
+                // per PROCESS, so its enumeration order is not guaranteed stable
+                // across runs. The order here becomes the order of `values`,
+                // which feeds ValuesKey -> the fragment Key -> the relic
+                // fingerprint, i.e. generation output. Today every ledger fix
+                // carries exactly ONE value key so the order is trivial, but a
+                // future entry with two would make generation process-dependent
+                // (same seed, different relics) - a defect that would be very
+                // hard to attribute. Ordinal sort removes the class outright and
+                // is a no-op for the current single-key data.
+                foreach (KeyValuePair<string, int> injection in
+                         fix.Values.OrderBy(kv => kv.Key, StringComparer.Ordinal))
                 {
                     if (values.All(v => !string.Equals(v.Id, injection.Key, StringComparison.Ordinal)))
                     {

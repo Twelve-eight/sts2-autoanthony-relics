@@ -1,3 +1,43 @@
+## WS-0919-05 - 2026-09-19 - 全量代码审查 (用户指令"审查所有代码")
+
+### 方法
+
+先派 3 个 reviewer 子代理(生成层/执行器/生命周期)并行审查, 但它们**静默 7-8 分钟**
+(AGENTS.md Sec 11 阈值), 已取消并**收回主会话自做**. 主会话的审查比子代理更有效:
+可直接跑暴力验证与跨进程实验.
+
+### 修掉一个真实缺陷(潜在非确定性)
+
+`RelicFragments.Build` 直接迭代 `Dictionary<string,int> fix.Values`.
+.NET **字符串哈希按进程随机化** -> 字典枚举顺序**不保证跨进程稳定** -> 进入 `values` 顺序
+-> `ValuesKey` -> 片段 Key -> 遗物 fingerprint -> **生成输出**.
+实测当前账本每个 fix 只有 1 个 value key(max=1, 无多键条目), 所以尚未触发;
+但加一个双键 fix 就会让同一 seed 在不同进程产出不同遗物, 且极难归因.
+已改为 Ordinal 排序(对现有数据是 no-op).
+
+### 暴力验证(而非抽样)
+
+`PickBand` 的整数算术对 **68,921** 组三权重组合(0..400 步长 10)全部验证通过:
+- `Math.Clamp(value, min, max)` 在 `min > max` 时**抛异常**, 而我传的 min 是
+  `benefitThreshold + 1` -- 这是真实崩溃风险. 全组合无抛出.
+- 阈值恒在 [0,100] 且严格递增; 非零权重恒保留其档可达.
+
+### 新增断言
+
+"关闭负面"配置下的**良构性**: 默认 soak 只跑出厂设置, 看不到该配置, 而该配置会从触发池
+移除片段 -- 这是"有触发但零效果"遗物的唯一产生途径. 已加 120 seeds 断言(通过).
+
+### 核实为正确的项(已记录, 不再重复检查)
+
+- 生成层全仓库无 `GetHashCode`; 池组装 `OrderBy(Ordinal)`; `Union` 用 `SortedSet`;
+  `RestrictionOffsets` 仅 `ContainsKey`/`TryGetValue`(顺序无关).
+- 跨进程确定性: 3 次独立进程, fingerprint 与断言一致.
+- `GenerationSettings.Key` 打包 1+1+4x10 = 42 bit(余 63 bit), 各字段 clamp 到 10 bit -> 单射无碰撞.
+- `retain_hand` 在两种状态下都可达; 额外池负面 `ethereal_hand_card` 确实被覆盖
+  (断言其出现在默认集合里, 而非假设).
+- `CombatCardSelection` 是引擎对"战斗中随机选牌"的既有约定(TrueGrit/Cinder/Thrash/
+  MummifiedHand/JeweledMask), 通道存在且语义相符.
+
 ## WS-0919-04 - 2026-09-19 - "关闭所有负面效果"选项 (用户指令)
 
 ### 指令
@@ -27,9 +67,31 @@
 包括选项为关(行为与旧版完全相同)的局, 对每个既有存档都是无谓的 60 件遗物重掷.
 选项不需要它: 它已是缓存键的分量, 开关切换会正确地重新生成. 已在 `SeedVersion` 处写明理由.
 
+### 审查发现的遗漏: 符号负值 (已修)
+
+`IsNegative = IsDownside || IsRestriction` **漏掉**了按**符号**判定的负值:
+`BigMushroom#ModifyHandDraw` 的账本 fix 把 amount 覆盖为 **-2**(渲染"少抽2张牌"),
+这是真实代价, 却不在任何 opcode 黑名单里 -- 开启"关闭负面"后它仍会出现.
+根因: 极性在这个 opcode 上是**按值**而非按 opcode 的(`modify_hand_draw` 两个符号都有:
+BagOfPreparation +2 是增益, BigMushroom -2 是代价), 生成器自己的 `RestrictionOffsets`
+注释早就把它称作 "the -2 downside".
+
+已修: `IsNegative` 增加 `|| (Opcode == "modify_hand_draw" && Amount < 0)`.
+同时把探针从"只断言 `IsNegative`"改为**也断言没有任何效果的值为负** --
+只断言 `IsNegative` 是循环论证(属性写错也会通过).
+判别力验证: 去掉符号子句 -> `no drawn effect has a negative VALUE` FAIL,
+报告 `modify_hand_draw|passive|self|True|amount:-2 (amount=-2)`.
+
+### 已知代价 (实测, 刻意接受)
+
+关掉 6 个限制类后被动档只剩 1 个可用普通被动, 多样性下降.
+40 局实测: 被动档 231 槽位 / **6 种**遗物(未开启时 13 种 shape).
+**没有**塌缩成单一件, 但确实变单调. 接受并记录: 玩家显式要求关掉负面,
+用多样性换掉负面是本意; 要恢复多样性应**扩充非负面被动池**, 而非让限制类漏回来.
+
 ### 验证
 
-- `tools/relic-probe`: PROBE OK, 4 项新断言(默认会抽到负面 / 开启后一件都没有 /
+- `tools/relic-probe`: PROBE OK, 5 项新断言(默认会抽到负面 / 开启后一件都没有 /
   `retain_hand` 两种状态都可达 / 选项确实改变生成).
   判别力验证: 把 benefit opcode 也算作负面(即误判 `retain_hand`)
   -> `retain_hand survives the option` FAIL (`off=1 on=0`).
