@@ -100,6 +100,35 @@ public sealed record EffectFragment(
     public bool IsBenefit => BenefitOpcodes.Contains(Opcode);
 
     /// <summary>
+    /// A NEGATIVE effect: something a player would not want, i.e. what the
+    /// "disable all negative effects" option removes (user order 2026-09-19).
+    ///
+    /// Two disjoint sources, and the definition is their union on purpose:
+    /// - <see cref="DownsideOpcodes"/>: triggered effects that hurt the owner
+    ///   (lose HP / max HP / gold, add a curse, hand Ethereal).
+    /// - <see cref="RestrictionOpcodes"/>: the Ancient veto/penalty affixes.
+    ///   They are negative even though the generator always ships them WITH an
+    ///   offsetting benefit (RestrictionOffsets) - the offset is what makes the
+    ///   pair fair, not what makes the restriction stop being a cost. A player
+    ///   asking for "no negative effects" is asking to not receive a
+    ///   gold-gain veto at all, not to receive it with a consolation prize.
+    ///
+    /// DELIBERATELY NOT NEGATIVE - <c>retain_hand</c> (RunicPyramid's
+    /// ShouldFlush returning false, i.e. "your hand is not discarded at end of
+    /// turn"). It is a veto-shaped hook like the restrictions, so it looks like
+    /// one at a glance, but it only ever KEEPS cards the player would otherwise
+    /// lose. The user called this out explicitly. It stays in
+    /// <see cref="BenefitOpcodes"/>.
+    ///
+    /// Also not negative: <c>modify_card_cost</c> is listed in
+    /// RestrictionOpcodes (it is SpikedGauntlets' "Powers cost +1" veto, paired
+    /// with +1 Energy), and <c>enemy_strength_gain</c> is
+    /// PhilosophersStone's "enemies gain Strength" (paired with +1 Energy).
+    /// Both are genuinely negative to their owner.
+    /// </summary>
+    public bool IsNegative => IsDownside || IsRestriction;
+
+    /// <summary>
     /// Extra-pool opcodes (user order 2026-09-18) whose target is the owner's
     /// HAND, i.e. the effects that need a populated hand to do anything.
     ///

@@ -30,10 +30,12 @@ internal static class Program
     private static class GenerationSettingsTest
     {
         public static void Set(bool? includeExtraPool = null, int? weightTriggered = null,
-            int? weightPassive = null, int? weightBenefit = null, int? weightExtra = null) =>
+            int? weightPassive = null, int? weightBenefit = null, int? weightExtra = null,
+            bool? disableNegatives = null) =>
             GenerationSettings.FreezeExplicit(
                 includeExtraPool ?? false,
-                weightTriggered ?? 100, weightPassive ?? 100, weightBenefit ?? 100, weightExtra ?? 100);
+                weightTriggered ?? 100, weightPassive ?? 100, weightBenefit ?? 100, weightExtra ?? 100,
+                disableNegatives ?? false);
 
         public static void Reset() => GenerationSettings.Unfreeze();
     }
@@ -573,6 +575,73 @@ internal static class Program
         Check(allZeroBenefit > 0 && allZeroPassive > 0 && allZeroTriggered > 0,
             "weight: all four at 0 falls back to the shipped base rates (every band still present)",
             $"{allZeroBenefit}/{allZeroPassive}/{allZeroTriggered}");
+
+        // ---- 8a6. "DISABLE ALL NEGATIVE EFFECTS" (user order 2026-09-19).
+        // With the option off, negatives must still be drawn (otherwise the
+        // option's effect would be indistinguishable from the default, and a
+        // regression that made everything negative would pass unnoticed). With
+        // it on, NO drawn effect may be negative - and retain_hand, which is
+        // explicitly not negative, must still be reachable.
+        var negativesOff = new HashSet<string>(StringComparer.Ordinal);
+        var negativesOn = new HashSet<string>(StringComparer.Ordinal);
+        var retainOff = new HashSet<string>(StringComparer.Ordinal);
+        var retainOn = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < 120; i++)
+        {
+            string seed = $"neg-{i}";
+            foreach (var d in RelicGenerator.Generate(seed, pool))
+            {
+                foreach (var e in d.Effects)
+                {
+                    if (e.IsNegative)
+                    {
+                        negativesOff.Add(e.Key);
+                    }
+                    if (e.Opcode == "retain_hand")
+                    {
+                        retainOff.Add(e.Key);
+                    }
+                }
+            }
+        }
+        GenerationSettingsTest.Set(disableNegatives: true);
+        try
+        {
+            for (int i = 0; i < 120; i++)
+            {
+                foreach (var d in RelicGenerator.Generate($"neg-{i}", pool))
+                {
+                    foreach (var e in d.Effects)
+                    {
+                        if (e.IsNegative)
+                        {
+                            negativesOn.Add(e.Key);
+                        }
+                        if (e.Opcode == "retain_hand")
+                        {
+                            retainOn.Add(e.Key);
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        Check(negativesOff.Count > 0, "negatives: drawn by default (the option has something to remove)",
+            $"{negativesOff.Count} distinct");
+        Check(negativesOn.Count == 0, "negatives: NONE drawn when the option is on",
+            negativesOn.Count == 0 ? "none" : string.Join(",", negativesOn.Take(5)));
+        // retain_hand must be reachable in BOTH states - it is the case the user
+        // called out, and a naive implementation that treated every veto-shaped
+        // hook as negative would silently remove it.
+        Check(retainOff.Count > 0 && retainOn.Count > 0,
+            "negatives: retain_hand survives the option (it is not a downside)",
+            $"off={retainOff.Count} on={retainOn.Count}");
+        // And the option must actually change the generated set, or it is inert.
+        Check(!negativesOff.SetEquals(negativesOn) && negativesOn.Count == 0,
+            "negatives: the option changes generation rather than being inert");
 
         // ---- 8a5. HAND/Deck EFFECT TIMING (user order 2026-09-18).
         // The generator's rules 7 must keep hand effects off pre-draw triggers

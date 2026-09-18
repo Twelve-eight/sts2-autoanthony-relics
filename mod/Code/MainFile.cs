@@ -114,7 +114,8 @@ public partial class MainFile : Node
                 AutoAnthonyRelicsConfig.WeightTriggeredCore,
                 AutoAnthonyRelicsConfig.WeightPassiveCore,
                 AutoAnthonyRelicsConfig.WeightBenefitCore,
-                AutoAnthonyRelicsConfig.WeightExtra);
+                AutoAnthonyRelicsConfig.WeightExtra,
+                AutoAnthonyRelicsConfig.DisableNegativeEffects);
 
             // Relic data: atoms (extractor candidates) + ledger (hand-audited
             // verdicts) -> independent trigger/effect fragment pools. The extra
@@ -146,6 +147,7 @@ public partial class MainFile : Node
                         // seed version: they are part of the definition cache key, so they decide
                         // whether an existing save regenerates.
                         $"extraPool={AutoAnthonyRelicsConfig.EnableExtraEffectPool}, " +
+                        $"disableNegatives={AutoAnthonyRelicsConfig.DisableNegativeEffects}, " +
                         $"weights(triggered/passive/benefit/extra)=" +
                         $"{AutoAnthonyRelicsConfig.WeightTriggeredCore}/" +
                         $"{AutoAnthonyRelicsConfig.WeightPassiveCore}/" +

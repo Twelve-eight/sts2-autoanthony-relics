@@ -79,6 +79,30 @@ internal class AutoAnthonyRelicsConfig : SimpleModConfig
     public static bool EnableExtraEffectPool { get; set; } = false;
 
     /// <summary>
+    /// When on, generated relics NEVER carry a negative effect (user order
+    /// 2026-09-19). Covers both sources: the triggered downsides (lose HP / max
+    /// HP / gold, add a curse, hand Ethereal) and the Ancient restriction
+    /// affixes (gold / potion / card-play / draw vetoes, Powers cost +1, enemies
+    /// gain Strength). See EffectFragment.IsNegative.
+    ///
+    /// NOT negative, and therefore unaffected: <c>retain_hand</c> - "your hand
+    /// is not discarded at the end of the turn". It uses a veto-shaped engine
+    /// hook (ShouldFlush) like the restrictions, so it reads as a downside at a
+    /// glance, but it only ever keeps cards the player would otherwise lose. The
+    /// user called this out explicitly.
+    ///
+    /// OFF by default: it removes content, so leaving it off keeps the full pool
+    /// and reproduces the previous generation. A Tier-1 MP determinism key - both
+    /// ends must match.
+    ///
+    /// NAME CHECK (see EnableExtraEffectPool's note): this name must not appear
+    /// in QuriousCraftingRelics' KnownLegacyScalarKeys or in its template-scoped
+    /// prefixes (Cost_/Refund_/Min_/Max_), or its config migration could claim
+    /// this mod's config file again. It does not.
+    /// </summary>
+    public static bool DisableNegativeEffects { get; set; } = false;
+
+    /// <summary>
     /// Relative sampling weight of the CORE triggered fragments (the default
     /// pool: damage / block / energy / draw / powers / downsides). Only the
     /// ratio between the weights matters; 100 is the neutral value that

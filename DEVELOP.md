@@ -470,3 +470,42 @@ AAR 设置全部重置, 且 6 个 AAR 键被灌进 Qurious 的 cfg.
   配置 -> BaseLib -> `ConfigSource` -> `GenerationSettings` 全链路打通.
 - **未覆盖**: 手牌效果在真实战斗中的实际生效(需要玩家开局并打开额外池;
   后台输入对 Godot 无效), 以及 MP 两端一致性.
+
+### 关闭所有负面效果 (2026-09-19 用户指令)
+
+新配置 `DisableNegativeEffects`, **默认关**(关闭它等于删除内容, 默认保持完整池).
+
+**"负面"的定义** = `EffectFragment.IsNegative` = `IsDownside || IsRestriction`, 两个不相交来源:
+
+| 来源 | 内容 |
+|---|---|
+| `DownsideOpcodes` | 触发类伤害:失去生命/生命上限/金币, 获得诅咒, 手牌虚无 |
+| `RestrictionOpcodes` | 先古限制类词条:金币/药水/出牌数/抽牌限制, 能力牌费用 +1, 敌人获得力量 |
+
+限制类**算负面**, 尽管生成器总是让它与其补偿一起出现(`RestrictionOffsets`). 补偿让这对
+词条**公平**, 但不让限制本身不再是代价 -- 玩家说"不要负面效果"是指**根本不要**收到
+"金币获取被否决"这件遗物, 而不是"要它但附赠补偿".
+
+**明确不算负面**:
+- `retain_hand`(RunicPyramid 的 `ShouldFlush` 返回 false, 即"回合结束不弃手牌").
+  它和限制类一样走**否决型**引擎钩子, 一眼看去像负面, 但它只会**保留**玩家本会失去的牌.
+  用户特别点名了这一点. 它在 `BenefitOpcodes` 里.
+- `modify_card_cost` / `enemy_strength_gain` **算**负面(已读引擎实现体确认:
+  SpikedGauntlets 让能力牌费用 +1, PhilosophersStone 让敌人获得力量, 各带 +1 能量补偿).
+
+**接入方式**: 与额外池开关同构 -- 池**恒定构建**, 选项只作用于生成期的
+`RelicGenerator.Excluded` 规则 8. 选项是 `GenerationSettings.Key` 的分量, 因而进入定义
+缓存键, 开启/关闭各自生成不同定义, 但不需要重建池.
+
+**为什么 SeedVersion 不 bump**: `SeedVersion` 是 RNG **流字符串**的一部分
+(`RelicGenerator.cs:506`), 所以 bump 会**重掷所有局**, 包括选项为关(即行为与旧版完全相同)
+的局 -- 对每个既有存档都是无谓的 60 件遗物重掷. 本选项不需要它: 它已经是
+`GenerationSettings.Key` 的分量, 而该 Key 已在缓存键里, 所以开关切换会正确地重新生成.
+(与 v8 的权重同理, 那些权重也是经 Key 生效而没有单独 bump 版本.)
+
+**验证**: `tools/relic-probe` 4 项断言(默认确实会抽到负面; 开启后**一件都没有**;
+`retain_hand` 在两种状态下都可达; 选项确实改变生成而非空转).
+判别力验证: 把 `IsNegative` 改成"所有 benefit opcode 也算负面"(即把 `retain_hand`
+误判为负面)-> `retain_hand survives the option` FAIL (`off=1 on=0`).
+`tools/relic-eligibility-probe` 的 oracle 同步加了规则 8(直接读 `IsNegative`, 不重列 opcode,
+以免与实现漂移).

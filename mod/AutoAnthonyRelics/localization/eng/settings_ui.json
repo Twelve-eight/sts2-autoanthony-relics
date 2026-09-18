@@ -13,6 +13,8 @@
   "AUTOANTHONYRELICS-WEIGHT_BENEFIT_CORE.hover.desc": "How much of the relic pool is strictly-beneficial passives (the Ancient benefit affixes) rather than triggered or passive relics. Scales the benefit band's share of the slot roll; it does NOT choose which benefit wins inside the band. Set to 0 to remove the band. MULTIPLAYER: every player must use the same value.",
   "AUTOANTHONYRELICS-WEIGHT_EXTRA.title": "Weight: Extra Pool Effects",
   "AUTOANTHONYRELICS-WEIGHT_EXTRA.hover.desc": "How much the extra effect pool contributes, relative to the core pools. This one also reweights INSIDE the triggered band, since core and extra fragments are sampled together there. Ignored while the extra effect pool is off. MULTIPLAYER: every player must use the same value.",
+  "AUTOANTHONYRELICS-DISABLE_NEGATIVE_EFFECTS.title": "Disable All Negative Effects",
+  "AUTOANTHONYRELICS-DISABLE_NEGATIVE_EFFECTS.hover.desc": "When on: generated relics never carry a negative effect - no losing HP, max HP or gold, no curses, no hand-Ethereal, and none of the Ancient restriction affixes (gold / potion / card-play / draw vetoes, Powers cost +1, enemies gain Strength). Off by default. NOTE: 'your hand is not discarded at the end of the turn' is NOT treated as negative and can still appear - it only ever keeps cards you would otherwise lose. MULTIPLAYER: this changes generation, so every player must use the same value.",
   "AUTOANTHONYRELICS-SETTINGS_GROUP.title": "Anthony Algorithm - Relics",
   "AUTOANTHONYRELICS-SETTINGS_OPEN.title": "Open Settings",
   "AUTOANTHONYRELICS-SETTINGS_PAGE_TITLE.title": "Anthony Algorithm - Relics",

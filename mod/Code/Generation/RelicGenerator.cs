@@ -178,6 +178,16 @@ public static class RelicGenerator
     /// 8 sampled real seeds). The branch is now gated by
     /// <see cref="RestrictionRelicChancePercent"/>, so a run draws a
     /// seed-dependent SUBSET. RNG-shape change, same reason as v5->v6.
+    /// NOT bumped for "disable all negative effects" (user order 2026-09-19),
+    /// although that option does change generation. Reason: SeedVersion is part
+    /// of the RNG STREAM STRING (:506), so bumping re-rolls EVERY run including
+    /// the default ones, where the option's only effect is an always-false
+    /// condition in Excluded - i.e. a gratuitous re-roll of 60 relics for every
+    /// existing save. The option does not need it: it is a component of
+    /// GenerationSettings.Key, which is already part of the definition cache
+    /// key, so opting in/out produces a distinct cache entry and regenerates
+    /// exactly when it should. (Same reasoning as the v8 weights, which also
+    /// reached the key without a separate version.)
     /// v8: extra pool + per-pool weights (user order 2026-09-18). Three changes
     /// at once, all pool-shape or RNG-shape: (a) the extra pool adds 9 atoms and
     /// therefore 9 name morphemes, which widens RelicText.AllSources - the tail
@@ -474,7 +484,14 @@ public static class RelicGenerator
         || (effect.IsHandEffect
             && (trigger is null || !EffectFragment.HandEffectTriggers.Contains(trigger.Kind)))
         || (effect.IsDeckEffect
-            && (trigger is null || !EffectFragment.DeckEffectTriggers.Contains(trigger.Kind)));
+            && (trigger is null || !EffectFragment.DeckEffectTriggers.Contains(trigger.Kind)))
+        // 8. "Disable all negative effects" (user order 2026-09-19). Gated here
+        //    rather than by rebuilding the pool, exactly like rule 6: the pool is
+        //    built once and the option is part of the definition cache key, so a
+        //    rebuild mid-run - the thing the cache key exists to avoid - is not
+        //    needed. See EffectFragment.IsNegative for what counts as negative;
+        //    retain_hand is explicitly NOT negative.
+        || (effect.IsNegative && GenerationSettings.Current.DisableNegativeEffects);
 
     public static IReadOnlyList<GeneratedRelicDefinition> Generate(string runSeed, RelicFragmentPool pool)
     {

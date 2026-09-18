@@ -44,13 +44,15 @@ internal readonly struct GenerationSettings
         int weightTriggeredCore,
         int weightPassiveCore,
         int weightBenefitCore,
-        int weightExtra)
+        int weightExtra,
+        bool disableNegativeEffects = false)
     {
         IncludeExtraPool = includeExtraPool;
         WeightTriggeredCore = Clamp(weightTriggeredCore);
         WeightPassiveCore = Clamp(weightPassiveCore);
         WeightBenefitCore = Clamp(weightBenefitCore);
         WeightExtra = Clamp(weightExtra);
+        DisableNegativeEffects = disableNegativeEffects;
     }
 
     /// <summary>
@@ -61,6 +63,17 @@ internal readonly struct GenerationSettings
     private static int Clamp(int value) => value < 0 ? 0 : value > WeightMask ? WeightMask : value;
 
     internal bool IncludeExtraPool { get; }
+
+    /// <summary>
+    /// When on, NO relic may carry a negative effect (user order 2026-09-19).
+    /// See EffectFragment.IsNegative for what that covers, and note that
+    /// <c>retain_hand</c> is deliberately NOT negative.
+    ///
+    /// Off by default: it removes content, so a run that leaves it off keeps the
+    /// full pool. Tier-1 MP determinism key - both ends must match.
+    /// </summary>
+    internal bool DisableNegativeEffects { get; }
+
     internal int WeightTriggeredCore { get; }
     internal int WeightPassiveCore { get; }
     internal int WeightBenefitCore { get; }
@@ -74,7 +87,8 @@ internal readonly struct GenerationSettings
     internal static readonly GenerationSettings Default = new(
         includeExtraPool: false,
         weightTriggeredCore: 100, weightPassiveCore: 100,
-        weightBenefitCore: 100, weightExtra: 100);
+        weightBenefitCore: 100, weightExtra: 100,
+        disableNegativeEffects: false);
 
     /// <summary>
     /// Supplies the live settings-page values. Bound by the mod at startup
@@ -125,6 +139,7 @@ internal readonly struct GenerationSettings
             // Explicit field comparison, not Equals: the default ValueType.Equals
             // is reflection-based, and this runs on every definition lookup.
             if (live.IncludeExtraPool == current.IncludeExtraPool
+                && live.DisableNegativeEffects == current.DisableNegativeEffects
                 && live.WeightTriggeredCore == current.WeightTriggeredCore
                 && live.WeightPassiveCore == current.WeightPassiveCore
                 && live.WeightBenefitCore == current.WeightBenefitCore
@@ -163,10 +178,11 @@ internal readonly struct GenerationSettings
     /// this is a test seam, not a run-lifecycle transition.
     /// </summary>
     internal static void FreezeExplicit(bool includeExtraPool, int weightTriggeredCore,
-        int weightPassiveCore, int weightBenefitCore, int weightExtra)
+        int weightPassiveCore, int weightBenefitCore, int weightExtra,
+        bool disableNegativeEffects = false)
     {
         _frozen = new GenerationSettings(includeExtraPool, weightTriggeredCore,
-            weightPassiveCore, weightBenefitCore, weightExtra);
+            weightPassiveCore, weightBenefitCore, weightExtra, disableNegativeEffects);
         _hasFrozen = true;
     }
 
@@ -183,6 +199,7 @@ internal readonly struct GenerationSettings
         get
         {
             long key = IncludeExtraPool ? 1L : 0L;
+            key = (key << 1) | (DisableNegativeEffects ? 1L : 0L);
             key = (key << WeightBits) | (uint)WeightTriggeredCore;
             key = (key << WeightBits) | (uint)WeightPassiveCore;
             key = (key << WeightBits) | (uint)WeightBenefitCore;

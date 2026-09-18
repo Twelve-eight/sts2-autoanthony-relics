@@ -1,3 +1,43 @@
+## WS-0919-04 - 2026-09-19 - "关闭所有负面效果"选项 (用户指令)
+
+### 指令
+
+"为东尼遗物添加一个关闭所有负面效果的选项.(回合结束不自动丢弃手牌不是负面效果)"
+
+### 交付
+
+新配置 `DisableNegativeEffects`, **默认关**. 生成期谓词门控(与额外池开关同构):
+池恒定构建, 选项只作用于 `RelicGenerator.Excluded` 规则 8, 并作为
+`GenerationSettings.Key` 的分量进入定义缓存键.
+
+### "负面"的范围 (逐条读引擎实现体确认)
+
+`IsNegative = IsDownside || IsRestriction`:
+- **触发类伤害**: 失去生命 / 生命上限 / 金币, 获得诅咒, 手牌虚无.
+- **先古限制类**: 金币/药水/出牌数/抽牌限制, 能力牌费用 +1, 敌人获得力量.
+  限制类**算**负面: 补偿(`RestrictionOffsets`)让这对词条公平, 但不让限制本身不再是代价.
+
+**明确排除 `retain_hand`**(用户点名): 它是 RunicPyramid 的 `ShouldFlush` 返回 false,
+即"回合结束不弃手牌". 它和限制类一样是**否决型**钩子, 一眼像负面, 但只会保留玩家本会失去的牌.
+已在 `EffectFragment.IsNegative` 的文档里写明理由.
+
+### 一个刻意的"不做"
+
+**没有 bump SeedVersion**. 它参与 RNG 流字符串(`:506`), bump 会重掷**所有**局 --
+包括选项为关(行为与旧版完全相同)的局, 对每个既有存档都是无谓的 60 件遗物重掷.
+选项不需要它: 它已是缓存键的分量, 开关切换会正确地重新生成. 已在 `SeedVersion` 处写明理由.
+
+### 验证
+
+- `tools/relic-probe`: PROBE OK, 4 项新断言(默认会抽到负面 / 开启后一件都没有 /
+  `retain_hand` 两种状态都可达 / 选项确实改变生成).
+  判别力验证: 把 benefit opcode 也算作负面(即误判 `retain_hand`)
+  -> `retain_hand survives the option` FAIL (`off=1 on=0`).
+- `tools/relic-eligibility-probe`: PROBE OK, oracle 加了规则 8.
+- 实机: `disableNegatives=True` 出现在初始化日志 -> 配置 -> BaseLib -> `ConfigSource`
+  -> `GenerationSettings` 全链路打通; 无 `cfg migrated`; AAR 零异常.
+- **未覆盖**: 真实战斗中不出现负面遗物(需玩家开局), MP 一致性.
+
 ## WS-0919-03 - 2026-09-19 - 权重语义定稿 + 阈值截断缺陷 (接 WS-0919-02)
 
 ### 权重语义 (这是本特性的设计定稿)
