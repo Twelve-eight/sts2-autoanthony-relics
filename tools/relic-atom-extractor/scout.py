@@ -15,7 +15,7 @@ import re
 import sys
 from collections import Counter
 
-SRC = r"G:/omp works/Sts/sts2-spire1/research/engine-dllsrc/MegaCrit.Sts2.Core.Models.Relics"
+SRC = r"G:/omp works/sts2-spire1/research/engine-dllsrc/MegaCrit.Sts2.Core.Models.Relics"
 
 # Hooks that can carry a recombineable combat effect.
 HOOK_RE = re.compile(
