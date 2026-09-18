@@ -68,6 +68,60 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// Count generated slots per band over N seeds. A slot is a benefit relic
+    /// when it is a passive carrying a strict benefit, a passive relic when it
+    /// is passive without one, and a triggered relic otherwise - the same
+    /// partition RelicGenerator's band roll decides.
+    /// </summary>
+    private static (int Benefit, int Passive, int Triggered) CountBands(RelicFragmentPool pool, int seeds)
+    {
+        int benefit = 0, passive = 0, triggered = 0;
+        for (int i = 0; i < seeds; i++)
+        {
+            foreach (var d in RelicGenerator.Generate($"band-{i}", pool))
+            {
+                if (d.Trigger is not null)
+                {
+                    triggered++;
+                }
+                else if (d.Effects.Any(e => e.IsBenefit) && !d.Effects.Any(e => e.IsRestriction))
+                {
+                    benefit++;
+                }
+                else
+                {
+                    passive++;
+                }
+            }
+        }
+        return (benefit, passive, triggered);
+    }
+
+    /// <summary>
+    /// Assert one weight is individually effective: zeroing it must change the
+    /// band composition AND empty its own band.
+    /// </summary>
+    private static void CheckBandWeight(string label, int baseBenefit, int basePassive, int baseTriggered,
+        RelicFragmentPool pool, Action zero, int band)
+    {
+        int zeroBenefit, zeroPassive, zeroTriggered;
+        zero();
+        try
+        {
+            (zeroBenefit, zeroPassive, zeroTriggered) = CountBands(pool, 80);
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        bool moved = (baseBenefit, basePassive, baseTriggered) != (zeroBenefit, zeroPassive, zeroTriggered);
+        Check(moved, $"weight: '{label}' = 0 changes the band composition",
+            $"base={baseBenefit}/{basePassive}/{baseTriggered} zero={zeroBenefit}/{zeroPassive}/{zeroTriggered}");
+        int remaining = band switch { 0 => zeroBenefit, 1 => zeroPassive, _ => zeroTriggered };
+        Check(remaining == 0, $"weight: '{label}' = 0 removes that band entirely", $"{remaining} slots");
+    }
+
     private static void Check(bool condition, string label, string detail = "")
     {
         if (condition)
@@ -451,6 +505,24 @@ internal static class Program
         }
         Check(settingsStable, "settings: one (seed, settings) pair is reproducible");
         Check(settingsMatter, "settings: a skewed profile changes the generated set for the same seed");
+
+        // ---- 8a4b. EVERY SLIDER IS INDIVIDUALLY EFFECTIVE (user order
+        // 2026-09-18: "设置页面可调每种词条池的生成权重").
+        //
+        // A combined-profile check does NOT prove this: the triggered pick alone
+        // changes the mix, so the earlier assertion passed even when the
+        // passive/benefit weights were dead knobs (they were: those bands are
+        // weight-homogeneous, so a weighted pick inside them is arithmetically
+        // uniform - the weights now scale the BAND ROLL instead). Each weight is
+        // therefore exercised ON ITS OWN, with the others left at default, and
+        // must both change the composition and remove its band at zero.
+        var (baseBenefit, basePassive, baseTriggered) = CountBands(pool, 80);
+        CheckBandWeight("triggered", baseBenefit, basePassive, baseTriggered, pool,
+            () => GenerationSettingsTest.Set(weightTriggered: 0), band: 2);
+        CheckBandWeight("passive", baseBenefit, basePassive, baseTriggered, pool,
+            () => GenerationSettingsTest.Set(weightPassive: 0), band: 1);
+        CheckBandWeight("benefit", baseBenefit, basePassive, baseTriggered, pool,
+            () => GenerationSettingsTest.Set(weightBenefit: 0), band: 0);
 
         // ---- 8a5. HAND/Deck EFFECT TIMING (user order 2026-09-18).
         // The generator's rules 7 must keep hand effects off pre-draw triggers

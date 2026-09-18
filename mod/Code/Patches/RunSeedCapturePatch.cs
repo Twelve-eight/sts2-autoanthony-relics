@@ -68,9 +68,17 @@ internal static class RunSeedLaunchTrackPatch
         try
         {
             string? seed = __result?.Rng?.StringSeed;
+            // Freeze here too (idempotent): this is the SAVE-LOAD funnel, so a
+            // loaded run would otherwise stay unfrozen and a mid-run weight edit
+            // would re-roll the relics the player already holds - the defect the
+            // freeze exists to prevent. On a fresh run the early capture has
+            // already frozen, and Freeze() is a no-op then, so the snapshot the
+            // player started the run with always wins.
+            Generation.GenerationSettings.Freeze();
             AnthonyRelicRunRegistry.CurrentRunSeed = seed;
             AnthonyRelicLocUpdater.OnSeedCaptured(seed);
-            MainFile.Logger.Info($"[{MainFile.ModId}] run seed captured: {seed ?? "(null)"}");
+            MainFile.Logger.Info($"[{MainFile.ModId}] run seed captured: {seed ?? "(null)"}; " +
+                                 $"generation settings key: {Generation.GenerationSettings.Current.Key}");
         }
         catch (Exception e)
         {

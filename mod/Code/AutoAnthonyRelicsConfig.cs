@@ -17,7 +17,9 @@ namespace AutoAnthonyRelics;
 /// fingerprint, weight profile), so two ends with DIFFERENT generation keys
 /// generate DIFFERENT relics. EnableExtraEffectPool and the four weights are
 /// therefore Tier-1 MP determinism keys - both ends must match, exactly like
-/// QuriousCraftingRelics.EnableExtraEffectPool. This is a deliberate reversal of the
+/// QuriousCraftingRelics.EnableExtraPool (that mod's OWN property - note it is
+/// still named EnableExtraPool, which is exactly why this mod's key had to
+/// change). This is a deliberate reversal of the
 /// older "nothing here participates in generation" rule, because the user asked
 /// for generation knobs: the choice is between "toggles may differ" and "toggles
 /// can shape generation", and the latter was requested explicitly.
@@ -87,22 +89,30 @@ internal class AutoAnthonyRelicsConfig : SimpleModConfig
     public static int WeightTriggeredCore { get; set; } = 100;
 
     /// <summary>
-    /// Relative sampling weight of the CORE passive fragments (hand-draw
-    /// modifiers either sign, and the Ancient restriction affixes). Applies to
-    /// the restriction-pair branch, which does draw through the weighted
-    /// picker; the passive FALLBACK draw is uniform by design (see
-    /// RelicGenerator.PickEligiblePassive), so this weight cannot steer it.
+    /// Relative sampling weight of the CORE passive band (hand-draw modifiers
+    /// either sign, and the Ancient restriction affixes).
+    ///
+    /// This scales the BAND's share of the slot roll (RelicGenerator.PickBand):
+    /// raising it makes passive relics more common, 0 switches the band off
+    /// entirely. It does NOT reweight which passive is chosen inside the band -
+    /// every candidate there carries this same weight, so that pick is
+    /// arithmetically uniform, and the restriction PAIR is drawn uniformly too
+    /// (RelicGenerator's pairs[random.Next(pairs.Count)]). Those are deliberate:
+    /// the asked-for knob is "how much does this pool contribute", not
+    /// "which member of the pool wins".
     /// Tier-1 MP determinism key.
     /// </summary>
     [ConfigSlider(0, 400, 10)]
     public static int WeightPassiveCore { get; set; } = 100;
 
     /// <summary>
-    /// Relative sampling weight of the CORE strictly-beneficial passives (the
-    /// Ancient benefit affixes). The 5% benefit BAND rate is separate and
-    /// unchanged (RelicGenerator.BenefitRelicChancePercent); this weight only
-    /// decides which benefit wins when several are eligible. Tier-1 MP
-    /// determinism key.
+    /// Relative sampling weight of the CORE benefit band (the Ancient
+    /// strictly-beneficial affixes).
+    ///
+    /// Scales the band's share of the slot roll, exactly like
+    /// <see cref="WeightPassiveCore"/>; 0 switches the benefit band off. It does
+    /// NOT choose between benefit fragments (they all carry this same weight).
+    /// Tier-1 MP determinism key.
     /// </summary>
     [ConfigSlider(0, 400, 10)]
     public static int WeightBenefitCore { get; set; } = 100;

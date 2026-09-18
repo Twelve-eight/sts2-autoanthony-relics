@@ -130,8 +130,14 @@ public partial class MainFile : Node
                         $"fragments: {FragmentPool.Triggers.Count} triggers, " +
                         $"{FragmentPool.TriggeredEffects.Count} triggered effects, " +
                         $"{FragmentPool.PassiveEffects.Count} passives, " +
-                        $"{FragmentPool.BenefitEffects.Count} benefits " +
-                        $"({FragmentPool.PassiveEffects.Count(e => e.Pool == FragmentPoolKind.Extra)} extra-pool); " +
+                        $"{FragmentPool.BenefitEffects.Count} benefits; " +
+                        // Count the extra pool across BOTH lists. Counting only
+                        // PassiveEffects printed a structural 0 (all 9 extra
+                        // fragments are triggered), which read as "the extra pool
+                        // contributed nothing" - and this line is the primary
+                        // evidence channel for the feature.
+                        $"extra-pool: {FragmentPool.TriggeredEffects.Count(e => e.Pool == FragmentPoolKind.Extra)} " +
+                        $"triggered + {FragmentPool.PassiveEffects.Count(e => e.Pool == FragmentPoolKind.Extra)} passive; " +
                         $"restrictions: {FragmentPool.PassiveEffects.Count(e => e.IsRestriction)}");
 
             Logger.Info($"[{ModId}] initialized: enabled={AutoAnthonyRelicsConfig.Enabled}, " +

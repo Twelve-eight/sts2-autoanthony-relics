@@ -24,7 +24,9 @@ namespace AutoAnthonyRelics.Generation;
 ///
 /// MP DETERMINISM: these are Tier-1 keys. Two ends with different values
 /// generate different relics, so the settings page must say "both ends must
-/// match" - same treatment as QuriousCraftingRelics.EnableExtraEffectPool.
+/// match" - same treatment as QuriousCraftingRelics.EnableExtraPool (that mod's
+/// own property, whose name is the collision this mod's key had to move away
+/// from).
 ///
 /// A readonly STRUCT on purpose: <see cref="Current"/> is read on every
 /// definition lookup, and the registry around it is allocation-measured (see
@@ -134,18 +136,31 @@ internal readonly struct GenerationSettings
         }
     }
 
+    /// <summary>
+    /// Snapshot the settings page values for the run. IDEMPOTENT: the first
+    /// freeze of a run wins. Two capture points call this (the early
+    /// SetUpNew* prefix and the RunManager.Launch postfix used by save-load), and
+    /// the Launch funnel must not overwrite the snapshot the early capture took -
+    /// if it did, a settings edit between the two would silently re-roll the
+    /// relics the player already holds, which is exactly what the freeze exists
+    /// to prevent.
+    /// </summary>
     internal static void Freeze()
     {
+        if (_hasFrozen)
+        {
+            return;
+        }
         _frozen = FromConfig();
         _hasFrozen = true;
     }
 
     /// <summary>
     /// Freeze an EXPLICIT snapshot, bypassing the settings page. Exists so the
-    /// probe can exercise "extra pool on" and a skewed weight profile without
-    /// writing user config (the probe runs outside Godot and must not touch the
-    /// player's settings file). Same effect as <see cref="Freeze"/> followed by
-    /// the player editing the settings.
+    /// probes can exercise "extra pool on" and a skewed weight profile without
+    /// writing user config (they run outside Godot and must not touch the
+    /// player's settings file). Always overwrites: unlike <see cref="Freeze"/>
+    /// this is a test seam, not a run-lifecycle transition.
     /// </summary>
     internal static void FreezeExplicit(bool includeExtraPool, int weightTriggeredCore,
         int weightPassiveCore, int weightBenefitCore, int weightExtra)

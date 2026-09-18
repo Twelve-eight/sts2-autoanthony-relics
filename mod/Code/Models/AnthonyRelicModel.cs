@@ -1290,10 +1290,12 @@ public abstract class AnthonyRelicModel : CustomRelicModel
                     }
                     break;
                 case "enchant_hand":
+                    // Level 1 per chosen card: for `enchant_hand` the amount is
+                    // a card COUNT ("enchant up to N cards"), not a level.
                     foreach (CardModel card in PickHand(owner, hand, amount,
                         c => CanEnchant(c, effect.Variant)))
                     {
-                        EnchantCard(card, effect.Variant!);
+                        EnchantCard(card, effect.Variant!, 1);
                     }
                     break;
             }
@@ -1305,6 +1307,18 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     /// exists outside combat, so unlike the hand effects this runs inline.
     /// Mirrors QuriousCraftingRelics' X_PICKUP_* behaviour: ONE random eligible
     /// deck card.
+    ///
+    /// RNG channel: <c>UpFront</c> is correct HERE (unlike the hand path, which
+    /// uses CombatCardSelection): this fires at `obtained`, outside combat, and
+    /// Qurious's equivalent pickup enchant uses the same channel
+    /// (ChaosRelicModel.cs:1017).
+    ///
+    /// The enchant LEVEL is <c>effect.Amount</c>, not 1: the relic text renders
+    /// `amount` as the level for this opcode ("enchant a random Attack card in
+    /// your deck with {amount} Sharp"), and the ledger's Values are the
+    /// documented tuning knob, so hardcoding 1 would silently desync the two the
+    /// moment an amount is edited. (The hand path's per-card 1 is correct there,
+    /// because for `enchant_hand` the amount is a card COUNT.)
     /// </summary>
     private void EnchantDeck(EffectFragment effect, Player owner)
     {
@@ -1312,6 +1326,11 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         {
             throw new InvalidOperationException(
                 $"enchant_deck without a variant on atom(s) {string.Join(",", effect.SourceAtoms)}");
+        }
+        int level = effect.Amount;
+        if (level <= 0)
+        {
+            return;
         }
         var deck = PileType.Deck.GetPile(owner).Cards;
         if (deck.Count == 0)
@@ -1328,23 +1347,28 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         CardModel? card = owner.RunState.Rng.UpFront.NextItem(eligible);
         if (card is not null)
         {
-            EnchantCard(card, effect.Variant);
+            EnchantCard(card, effect.Variant, level);
         }
     }
 
     /// <summary>
     /// Choose up to <paramref name="count"/> eligible cards from the hand.
-    /// Uses the run-level UpFront RNG channel (the same one Qurious uses for its
-    /// pickup enchants): a run-scoped, seed-deterministic stream, so this does
-    /// not perturb the combat channels (CombatTargets / CombatCardSelection)
-    /// that the engine's own draws depend on.
+    ///
+    /// RNG CHANNEL (corrected 2026-09-19): <c>CombatCardSelection</c>, which
+    /// RunRngSet documents as "cards that are randomly chosen during combat by
+    /// things like True Grit" and which the engine's own card-picking relics use
+    /// (TrueGrit.cs:40, Cinder.cs:35, Thrash.cs:50, MummifiedHand.cs:30,
+    /// JeweledMask.cs:32). This first used <c>UpFront</c>, which is the
+    /// RUN-GENERATION stream - "which monsters you'll fight / which events /
+    /// which relics you'll be offered" (RunRngSet.cs:29-33) - so consuming it at
+    /// every turn start shifted all later act, map and relic rolls for the run.
     /// </summary>
     private static List<CardModel> PickHand(Player owner, List<CardModel> hand, int count,
         Func<CardModel, bool> eligible)
     {
         var pool = hand.Where(eligible).ToList();
         var picked = new List<CardModel>(Math.Min(count, pool.Count));
-        var rng = owner.RunState.Rng.UpFront;
+        var rng = owner.RunState.Rng.CombatCardSelection;
         while (picked.Count < count && pool.Count > 0)
         {
             CardModel? card = rng.NextItem(pool);
@@ -1363,8 +1387,18 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     /// card-type restriction (Sharp = Attack, Nimble = GainsBlock, Imbued =
     /// Skill) and the one-enchantment-slot rule - and it is REQUIRED, because
     /// CardCmd.Enchant THROWS InvalidOperationException on an ineligible card
-    /// (CardCmd.cs:537) rather than returning null. Same guard Qurious applies
-    /// (ChaosRelicModel.CanTakeEnchant).
+    /// (CardCmd.cs:537) rather than returning null.
+    ///
+    /// DIFFERENCE FROM QURIOUS (2026-09-19): Qurious's
+    /// <c>CanTakeEnchant</c> deliberately bypasses the engine's non-stackable
+    /// rejection so a same-type re-enchant can LEVEL UP an existing
+    /// enchantment, paired with its own <c>EnchantWithStacking</c>. This mod
+    /// does NOT: vanilla's last branch rejects any card that already carries an
+    /// enchantment (Sharp/Nimble/Imbued all leave IsStackable false,
+    /// EnchantmentModel.cs:173), so an already-enchanted card is skipped and a
+    /// level can never be raised by a second affix. That is a deliberate
+    /// behaviour choice for this mod (each generated relic enchants untouched
+    /// cards), not parity with Qurious.
     /// </summary>
     private static bool CanEnchant(CardModel card, string? variant) => variant switch
     {
@@ -1375,26 +1409,26 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     };
 
     /// <summary>
-    /// Enchant a card. The variant is DATA, so the generic
-    /// <c>CardCmd.Enchant&lt;T&gt;</c> cannot be called directly; the closed
-    /// three-case switch is the honest form of that dispatch. It resolves the
-    /// same public overload the generic form does (CardCmd.cs:520 delegates to
-    /// :534) and, like it, takes a MUTABLE copy via <c>ToMutable()</c> - passing
-    /// the canonical instance would fail the command's own AssertMutable.
+    /// Enchant a card with <paramref name="level"/> levels. The variant is DATA,
+    /// so the generic <c>CardCmd.Enchant&lt;T&gt;</c> cannot be called directly;
+    /// the closed three-case switch is the honest form of that dispatch. It
+    /// resolves the same public overload the generic form does (CardCmd.cs:520
+    /// delegates to :534) and, like it, takes a MUTABLE copy - passing the
+    /// canonical instance would fail the command's own AssertMutable.
     /// An unknown variant throws into the effect fuse, never a silent no-op.
     /// </summary>
-    private static void EnchantCard(CardModel card, string variant)
+    private static void EnchantCard(CardModel card, string variant, int level)
     {
         switch (variant)
         {
             case "sharp":
-                CardCmd.Enchant<Sharp>(card, 1);
+                CardCmd.Enchant<Sharp>(card, level);
                 break;
             case "nimble":
-                CardCmd.Enchant<Nimble>(card, 1);
+                CardCmd.Enchant<Nimble>(card, level);
                 break;
             case "imbued":
-                CardCmd.Enchant<Imbued>(card, 1);
+                CardCmd.Enchant<Imbued>(card, level);
                 break;
             default:
                 throw new InvalidOperationException($"unsupported enchantment variant {variant}");

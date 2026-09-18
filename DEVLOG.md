@@ -1,3 +1,72 @@
+## WS-0919-02 - 2026-09-19 - 权重接线修正 + 审计发现的崩溃 (接 WS-0919-01)
+
+对 WS-0919-01 做了一轮对抗性审计, 查出**四个真实缺陷**, 其中两个是我自己引入的:
+
+### 1. 两个滑块是死的 (设计缺陷)
+
+初版把权重接在 `WeightOf` -> `PickWeightedUniquely`. 但 `BenefitEffects` 全带
+`WeightBenefitCore`, `PassiveEffects` 全带 `WeightPassiveCore` -- 档内**权重同质**,
+加权抽取在算术上等同均匀抽取. 只有 `pool.TriggeredEffects` 真正混了核心与额外片段,
+所以四个滑块里只有两个有实际作用, 而"设置页面可调每种词条池的生成权重"是用户原话.
+
+修正: 权重改为缩放**档位抽取**(新增 `RelicGenerator.PickBand`). 档内选取与 restriction
+配对保持均匀(有意为之 -- 旋钮是"池贡献多少", 不是"池内谁胜出"). 设置页 hover 文案同步改写,
+原先的文案承诺了代码做不到的事.
+
+**探针原先抓不到**: 倾斜 profile 里 `weightTriggered=400` 一项就足以改变组合,
+所以断言在 `WeightPassiveCore`/`WeightBenefitCore` 被整个删掉时仍然通过. 已改为
+**逐个权重单独置 0** 验证: 必须同时"改变档位构成"且"该档归零".
+
+### 2. 滑块拉到 0 会让游戏崩溃 (我自己引入的, 探针抓到)
+
+`PickWeightedUniquely` 的 `totalWeight == 0` 分支取 `pool[candidates[^1]]`, **不消耗 RNG**
+且每次返回同一个片段. 触发档权重置 0 时所有触发槽位拿到同一片段 -> provenance 相同 ->
+`PickName` 名字空间抽干 -> 抛 `InvalidOperationException`. 滑块范围是 `[0, 400]`,
+所以玩家拉到 0 就能在定义查询路径上触发未捕获异常.
+
+修复: 该分支改为**均匀抽取**(同时恢复 RNG 消耗). 另把 `PickName` 的空间耗尽从 throw
+改为返回最后一个合法组合 -- 名字重复只是观感, 抛异常会中断生成并破坏整局.
+
+判别力验证: 把退化分支改回旧写法 -> 探针 6 项 FAIL, 含
+`downside share ~= uniform  observed 1.000 vs uniform 0.300`(所有触发槽位同一片段).
+
+### 3. 存档读入路径没有冻结设置 (遗漏)
+
+`RunSeedLaunchTrackPatch.Postfix` 只设 `CurrentRunSeed`, 没有 `Freeze()`. 它是
+**读档漏斗**, 所以读档后的局处于未冻结状态, 局中改权重会重掷已持有的遗物 --
+正是冻结要防的事. 已补, 并把 `Freeze()` 改为**幂等**(首次冻结胜出), 使两个捕获点
+不会互相覆盖.
+
+### 4. 手牌抽取用了错误的 RNG 通道 (我自己引入的)
+
+`PickHand` 用了 `RunState.Rng.UpFront` -- 那是**局生成**通道("你会遇到哪些怪物/事件/遗物",
+`RunRngSet.cs:29-33`), 在每个回合开始消耗它会平移之后所有章节/地图/遗物 roll.
+引擎对"战斗中随机选牌"的既有约定是 `CombatCardSelection`(`RunRngSet.cs:62`,
+TrueGrit/Cinder/Thrash/MummifiedHand/JeweledMask 都用它). 已改用.
+`EnchantDeck` 保留 `UpFront`: 它在 `obtained` 时于局外跑, 与 Qurious 的拾取附魔一致.
+
+### 其他修正
+
+- `EnchantCard` 硬编码 1 级, 而 `enchant_deck` 的文案把 `amount` 渲染成**层数** ->
+  一旦账本 `Values` 被改, 文案与行为就会脱节. 已让牌组路径透传 `effect.Amount`
+  (手牌路径的每张 1 级是对的, 那里的 `amount` 是**张数**).
+- 启动日志 `(0 extra-pool)` 结构性恒为 0(9 个额外片段全是 triggered), 会被误读成
+  "额外池没生效". 已改为同时统计两个列表.
+- 两处注释把 Qurious 的属性误写成 `QuriousCraftingRelics.EnableExtraEffectPool`(不存在),
+  改为其真实名 `EnableExtraPool`.
+- `migration-probe` 的场景 2 **抓不到回归**: 它的 fixture 没有任何碰撞键, 旧规则也会跳过.
+  已新增**真实事故 fixture**(一个碰撞键 `EnableExtraPool` + 外来键). 判别力验证:
+  恢复旧规则 -> 该断言 FAIL 并复现"cfg migrated: 4 legacy keys".
+
+### 验证 (实测)
+
+- `tools/relic-probe`: PROBE OK.含逐个权重置 0 的档位验证.
+- `tools/relic-eligibility-probe`: PROBE OK.
+- `tools/migration-probe`: PROBE OK(含新的事故 fixture).
+- 实机(开关置 True): `extra-pool: 9 triggered + 0 passive`,
+  `extraPool=True`, `seedVersion=relics-v8`, 无 `cfg migrated`, AAR 零异常.
+- **未覆盖**: 手牌效果在真实战斗中的生效(需玩家开局), MP 一致性.
+
 ## WS-0919-01 - 2026-09-19 - 额外词条池 + 每池生成权重 (SeedVersion v8)
 
 ### 用户指令

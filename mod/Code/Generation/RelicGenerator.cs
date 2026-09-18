@@ -195,6 +195,65 @@ public static class RelicGenerator
     private const int PassiveRelicChancePercent = 15;
 
     /// <summary>
+    /// Choose which band a slot belongs to: 0 = benefit, 1 = passive, 2 =
+    /// triggered.
+    ///
+    /// The base rates are <see cref="BenefitRelicChancePercent"/> /
+    /// <see cref="PassiveRelicChancePercent"/> / the remainder, each scaled by
+    /// its pool weight. With the shipped weights (all 100) the scaled rates are
+    /// exactly 5 / 15 / 80 and the draw is the same single <c>Next(100)</c> with
+    /// the same thresholds as the pre-weight code, so the default reproduces the
+    /// previous generation byte-for-byte.
+    ///
+    /// A zero weight removes its band entirely, which is the honest meaning of
+    /// "weight 0" (a degenerate weighted pick with totalWeight == 0 would
+    /// instead fall through to an arbitrary last candidate).
+    ///
+    /// WHY THE BAND AND NOT THE FRAGMENT PICK: within a band every candidate
+    /// carries the SAME weight (BenefitEffects is all WeightBenefitCore,
+    /// PassiveEffects all WeightPassiveCore), so a weighted pick over those pools
+    /// is arithmetically identical to a uniform one and the sliders would be dead
+    /// knobs. Only the band roll can express "this pool contributes more or less
+    /// to generation", which is what the order asked for. WeightExtra is the
+    /// exception: pool.TriggeredEffects really does mix core and extra
+    /// fragments, so that weight also acts inside the triggered band.
+    /// </summary>
+    private static int PickBand(DeterministicRandom random, GenerationSettings settings)
+    {
+        int sBenefit = BenefitRelicChancePercent * settings.WeightBenefitCore;
+        int sPassive = PassiveRelicChancePercent * settings.WeightPassiveCore;
+        int sTriggered = (100 - BenefitRelicChancePercent - PassiveRelicChancePercent)
+                         * settings.WeightTriggeredCore;
+        int total = sBenefit + sPassive + sTriggered;
+        int benefitThreshold;
+        int passiveThreshold;
+        if (total <= 0)
+        {
+            // Every weight is zero: weights cannot steer anything, so use the
+            // shipped base rates rather than emitting one fixed band.
+            benefitThreshold = BenefitRelicChancePercent;
+            passiveThreshold = BenefitRelicChancePercent + PassiveRelicChancePercent;
+        }
+        else
+        {
+            benefitThreshold = (int)(100L * sBenefit / total);
+            passiveThreshold = (int)(100L * (sBenefit + sPassive) / total);
+        }
+        // ALWAYS Next(100), and with the shipped weights the thresholds are
+        // exactly 5 and 20 - i.e. the pre-weight draw, byte for byte. Drawing a
+        // wider range (Next(total)) would have been the obvious encoding but it
+        // changes the default stream and, measured on 2026-09-19, pushed two
+        // descriptions back into every seed. Keeping the range fixed means the
+        // weights only move the thresholds.
+        int roll = random.Next(100);
+        if (roll < benefitThreshold)
+        {
+            return 0;
+        }
+        return roll < passiveThreshold ? 1 : 2;
+    }
+
+    /// <summary>
     /// Chance a slot is a strictly-beneficial passive relic (user order
     /// 2026-09-17). Rolled on the SAME draw as <see cref="PassiveRelicChancePercent"/>,
     /// so the two are disjoint slot-level bands: 15% passive, 5% benefit, 80%
@@ -532,9 +591,22 @@ public static class RelicGenerator
             return chosen;
         }
 
-        int roll = random.Next(100);
-        bool wantBenefit = roll < BenefitRelicChancePercent;
-        bool wantPassive = roll < BenefitRelicChancePercent + PassiveRelicChancePercent;
+        // Band selection is WEIGHT-DRIVEN (user order 2026-09-18: one adjustable
+        // weight per effect pool). The base rates stay 5 / 15 / 80, each scaled
+        // by its pool's weight, so the shipped 100/100/100 reproduces the old
+        // rates exactly while a slider genuinely moves its band's share.
+        //
+        // Why the band roll and not the per-fragment picker: within a band every
+        // candidate carries the SAME weight (BenefitEffects is all
+        // WeightBenefitCore, PassiveEffects all WeightPassiveCore), so a weighted
+        // pick over those pools is arithmetically identical to a uniform one -
+        // the sliders would be dead knobs. Only the band roll can express "this
+        // pool contributes more/less to generation", which is what was asked
+        // for. WeightExtra is the exception: pool.TriggeredEffects really does
+        // mix core and extra fragments, so that weight acts inside the band too.
+        int band = PickBand(random, GenerationSettings.Current);
+        bool wantBenefit = band == 0;
+        bool wantPassive = band == 1;
 
         if (wantBenefit)
         {
@@ -550,8 +622,10 @@ public static class RelicGenerator
                 return chosen;
             }
             // No benefit left this run: fall through to the passive band rather
-            // than silently turning the slot into a triggered relic.
-            wantPassive = true;
+            // than silently turning the slot into a triggered relic - unless the
+            // passive band itself is switched off by a zero weight, in which case
+            // the triggered path is exactly where the player asked for it.
+            wantPassive = GenerationSettings.Current.WeightPassiveCore > 0;
         }
 
         if (!wantPassive)
@@ -726,6 +800,8 @@ public static class RelicGenerator
 
         // Deterministic sweep: the weighted draws are probabilistic, so a
         // collision-free pair must stay reachable when they keep colliding.
+        string lastEn = "";
+        string lastZhs = "";
         foreach (string stem in stems)
         {
             foreach ((string tail, int _) in tailPool)
@@ -738,6 +814,8 @@ public static class RelicGenerator
                 RelicText.NameMorpheme tailMorpheme = RelicText.Morpheme(tail);
                 string en = RelicText.ComposeEn(stemMorpheme.En, tailMorpheme.En);
                 string zhs = RelicText.ComposeZhs(stemMorpheme.Zhs, tailMorpheme.Zhs);
+                lastEn = en;
+                lastZhs = zhs;
                 if (used.Add(NameKey(en, zhs)))
                 {
                     return (en, zhs);
@@ -745,9 +823,23 @@ public static class RelicGenerator
             }
         }
 
-        // Unreachable: at least 45 x 44 = 1980 distinct names against 60 slots.
+        // Space exhausted: the pair space is the relic's own provenance x the
+        // source pool, and a per-pool weight of 0 concentrates every slot onto a
+        // handful of fragments, which makes many slots share one provenance set.
+        // A repeated NAME is cosmetic; throwing here would abort generation and
+        // break the run, and the weights are user-reachable (the sliders go to
+        // 0). So return the last composed pair - deterministic, still built from
+        // real provenance - and let the name repeat.
+        //
+        // This cannot trigger under the shipped weights: 60 slots over the full
+        // fragment pool never exhaust the name space, and the probe's
+        // "60 distinct names per run" assertion covers exactly that case.
+        if (lastEn.Length > 0)
+        {
+            return (lastEn, lastZhs);
+        }
         throw new InvalidOperationException(
-            $"name space exhausted after {used.Count} names; {RelicText.AllSources.Count} morphemes are not enough for {SlotCount} slots");
+            $"generated relic has no nameable provenance ({RelicText.AllSources.Count} morphemes)");
     }
 
     /// <summary>
@@ -856,20 +948,32 @@ public static class RelicGenerator
         {
             return null;
         }
+        // Degenerate all-zero weights: fall back to a UNIFORM draw rather than
+        // an arbitrary last candidate. The old `pool[candidates[^1]]` shortcut
+        // both ignored the RNG (changing the stream shape) and handed every
+        // caller the same fragment, which concentrated provenance and could
+        // exhaust the name space (2026-09-19). Reachable because the weight
+        // sliders go to 0; uniform is the honest reading of "no preference".
+        int pickedRoll = totalWeight > 0
+            ? random.Next((int)Math.Min(totalWeight, int.MaxValue))
+            : random.Next(candidates.Count);
         T picked = pool[candidates[^1]];
         if (totalWeight > 0)
         {
-            int roll = random.Next((int)Math.Min(totalWeight, int.MaxValue));
             int accumulated = 0;
             foreach (int index in candidates)
             {
                 accumulated += weightOf(pool[index]);
-                if (roll < accumulated)
+                if (pickedRoll < accumulated)
                 {
                     picked = pool[index];
                     break;
                 }
             }
+        }
+        else
+        {
+            picked = pool[candidates[pickedRoll]];
         }
         markUsed(picked);
         return picked;

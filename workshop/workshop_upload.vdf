@@ -22,7 +22,7 @@
 [*][b]双效果遗物[/b] - 约 30% 的遗物携带两个效果,同挂一个触发
 [*][b]纯被动遗物[/b] - 少数遗物是首回合抽牌修正(正负都有)
 [*][b]中英双语描述[/b] - 每件遗物的名字与描述由片段语义实时渲染
-[*][b]确定性[/b] - 同种子 = 同一批遗物(逐字节一致);定义不读任何设置项,读档/重连恢复同一批
+[*][b]确定性[/b] - 同种子 + 同生成设置 = 同一批遗物(逐字节一致);读档/重连恢复同一批
 [*][b]负面词条池[/b] - 全游戏遗物(含不参与再生成的先古/事件遗物)的负面词条入池: 诅咒,失去生命上限,失去金币,自伤;均匀抽取,无概率加成.带拾取效果的遗物不可交易,与引擎规则一致
 [*][b]先古限制词条[/b] - 先古遗物的限制类负面也入池(禁金币/禁药水/每回合出牌上限/卡牌效果不抽牌/能力牌费+1/敌人入场获得力量),每局按种子抽取其中若干条(实测每局 0-6 条),且必定与引擎原本配对的增益同体出现(例如“禁金币”配“+1 能量”),不会生成只有代价没有收益的遗物
 [*][b]纯增益词条[/b] - 先古遗物的纯增益(如 +1 能量)出现率限制在 5%
@@ -108,6 +108,6 @@
 
 局内按 ` 打开开发者控制台:
 [code]relic add AUTOANTHONYRELICS-ANTHONY_RELIC005[/code] (添加第 6 号槽位生成遗物)"
-	"changenote"		"v0.1.9: NEW - an optional EXTRA effect pool plus per-pool generation weights. The ledger gains 9 effects ported from Qurious Crafting Relics (give cards in your hand Retain / Sly / Ethereal, or enchant them with Sharp / Nimble / Imbued), in a new pool that is OFF by default. The settings page gains five controls: the extra-pool toggle and one sampling weight per effect pool (triggered / passive / benefit / extra). Only the ratio between the weights matters; leaving all four at 100 reproduces the previous uniform draw exactly. NOTE: the weights and the toggle are part of the generation key, so both ends of a multiplayer run must use the same values, and a run started on 0.1.8 gets its 60 relics REGENERATED (new names and effects) on first load under 0.1.9 - one-time only, after which the set is stable for that seed. FIX - a config-key collision with Qurious Crafting Relics: the new toggle was first named EnableExtraPool, which is also one of that mod's pre-rename config keys, and because both mods' config files share a filename (BaseLib derives it from the root namespace, and Qurious was renamed FROM AutoAnthonyRelics) its migration claimed and renamed THIS mod's config, resetting every setting. Both sides are fixed and the renamed key is now EnableExtraEffectPool."
+		"changenote"		"v0.1.9: NEW - an optional EXTRA effect pool plus per-pool generation weights. The ledger gains 9 effects ported from Qurious Crafting Relics (give cards in your hand Retain / Sly / Ethereal, or enchant them with Sharp / Nimble / Imbued), in a new pool that is OFF by default. The settings page gains five controls: the extra-pool toggle and one generation weight per effect pool (triggered / passive / benefit / extra). Each weight scales how much of the relic pool that band contributes; 100/100/100/100 reproduces the previous 80/15/5 split exactly, and 0 switches a band off. MULTIPLAYER: the toggle and the weights are part of the generation key, so every player must use the same values. A run started on 0.1.8 gets its 60 relics REGENERATED (new names and effects) on first load under 0.1.9 - one-time only, after which the set is stable for that seed. FIX - a config-key collision with Qurious Crafting Relics: the new toggle was first named EnableExtraPool, which is also one of that mod's pre-rename config keys, and because both mods' config files share a filename (BaseLib derives it from the root namespace, and Qurious was renamed FROM AutoAnthonyRelics) its migration claimed and renamed THIS mod's config, resetting every setting. Both sides are fixed and the renamed key is now EnableExtraEffectPool."
 	"publishedfileid"		"3801304033"
 }
