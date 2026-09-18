@@ -4,7 +4,7 @@
   "AUTOANTHONYRELICS-REPLACE_VANILLA_RELICS.title": "替换原版遗物",
   "AUTOANTHONYRELICS-REPLACE_VANILLA_RELICS.hover.desc": "开启时：从本局遗物袋中移除原版遗物，所有奖励来源（战斗/宝箱/商店/事件）只出生成遗物。先古之民、初始、Neow 与事件固定遗物永远不受影响。",
   "AUTOANTHONYRELICS-ENABLE_EXTRA_EFFECT_POOL.title": "额外词条池",
-  "AUTOANTHONYRELICS-ENABLE_EXTRA_EFFECT_POOL.hover.desc": "开启时:生成遗物还可能获得从怪异炼化遗物搬运来的卡牌级效果 - 给手牌附加保留/诡计/虚无,或给卡牌附魔锐利/灵巧/注魔.默认关闭:原版遗物从不做这些事.多人游戏:此项参与生成,所有玩家必须使用相同取值.",
+  "AUTOANTHONYRELICS-ENABLE_EXTRA_EFFECT_POOL.hover.desc": "开启时:生成遗物还可能获得从怪异炼化遗物搬运来的卡牌级效果 - 给手牌附加保留/奇巧/虚无,或给卡牌附魔锋利/灵巧/注能.默认关闭:原版遗物从不做这些事.多人游戏:此项参与生成,所有玩家必须使用相同取值.",
   "AUTOANTHONYRELICS-WEIGHT_TRIGGERED_CORE.title": "权重:触发词条",
   "AUTOANTHONYRELICS-WEIGHT_TRIGGERED_CORE.hover.desc": "遗物的触发效果(伤害/格挡/能量/抽牌/能力/负面)被抽中的相对几率.只有四个权重之间的比例有意义;四项均为 100 时即等同默认的等概率抽取.",
   "AUTOANTHONYRELICS-WEIGHT_PASSIVE_CORE.title": "权重:被动词条",
