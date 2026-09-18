@@ -118,7 +118,12 @@ public partial class MainFile : Node
                         $"restrictions: {FragmentPool.PassiveEffects.Count(e => e.IsRestriction)}");
 
             Logger.Info($"[{ModId}] initialized: enabled={AutoAnthonyRelicsConfig.Enabled}, " +
-                        $"replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics}");
+                        $"replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics}, " +
+                        // The generator version belongs in the log: it is part of the definition
+                        // cache key, so it decides whether an existing save regenerates. Without
+                        // it, an in-game log cannot be attributed to a build (2026-09-18: a log
+                        // was misread as evidence for a fix that was not in the running binary).
+                        $"seedVersion={Generation.RelicGenerator.SeedVersion}");
         }
         catch (Exception e)
         {

@@ -288,6 +288,83 @@ internal static class Program
             "soak: only max-HP-policy fragments unreachable",
             missing.Count == 0 ? "none missing" : string.Join(",", missing));
 
+        // ---- 8b. CROSS-SEED VARIETY (defect report 2026-09-18).
+        //
+        // Every assertion above tests a property that was PASSING while the mod
+        // shipped the same six restriction relics in 67 of 68 seeds: determinism
+        // ("same seed -> byte-identical"), uniqueness ("60 distinct names per
+        // run"), and REACHABILITY ("every fragment reachable in 200 seeds") are
+        // all satisfied by a generator that emits a fixed per-run set. Variety is
+        // a different property and nothing here measured it, so the defect had no
+        // failing check to trip.
+        //
+        // The real user seeds, not synthetic ones: the original report was
+        // demonstrated on these (7 of 60 descriptions were constant across all
+        // eight). A regression here is exactly the shipped defect.
+        string[] realSeeds =
+        {
+            "D39RA35Z86", "WCYZAU9V2H", "1FN9C93R6Z", "MU25VDXKHR93",
+            "U5ASK2HZSBAT", "RZ5VL1VT6PL7", "7HADLV839ET0", "1ZSDT8AZFNH9",
+        };
+        var perSeedDescriptions = new List<HashSet<string>>(realSeeds.Length);
+        var perSeedNames = new List<HashSet<string>>(realSeeds.Length);
+        var restrictionCounts = new List<int>(realSeeds.Length);
+        foreach (string seed in realSeeds)
+        {
+            var defs = RelicGenerator.Generate(seed, pool);
+            perSeedDescriptions.Add(new HashSet<string>(defs.Select(d => d.DescriptionEn)));
+            perSeedNames.Add(new HashSet<string>(defs.Select(d => d.NameEn)));
+            restrictionCounts.Add(defs.Count(d => d.Effects.Any(e => e.IsRestriction)));
+        }
+
+        // (a) No description may appear in EVERY run. The v6 defect had 7 such
+        // descriptions (all six restriction texts plus the -2 draw passive).
+        var constantDescriptions = new HashSet<string>(perSeedDescriptions[0]);
+        foreach (var s in perSeedDescriptions.Skip(1))
+        {
+            constantDescriptions.IntersectWith(s);
+        }
+        Check(constantDescriptions.Count == 0,
+            "variety: no relic description is present in every seed",
+            constantDescriptions.Count == 0
+                ? "0 of 60"
+                : $"{constantDescriptions.Count} constant: {string.Join(" | ", constantDescriptions.Take(3))}");
+
+        // Names too: a description-level fix that left naming invariant would
+        // still show the player the same relic names every run.
+        var constantNames = new HashSet<string>(perSeedNames[0]);
+        foreach (var s in perSeedNames.Skip(1))
+        {
+            constantNames.IntersectWith(s);
+        }
+        Check(constantNames.Count == 0,
+            "variety: no relic name is present in every seed",
+            constantNames.Count == 0 ? "0 of 60" : $"{constantNames.Count}: {string.Join(" | ", constantNames.Take(3))}");
+
+        // (b) The restriction count must SPREAD, not pin at the pool size. v6
+        // took the restriction branch whenever any remained, so the count was 6
+        // in 67 of 68 seeds - a per-run constant, which is what the players saw.
+        int distinctRestrictionCounts = restrictionCounts.Distinct().Count();
+        Check(distinctRestrictionCounts >= 3 && restrictionCounts.Max() < 6,
+            "variety: restriction-relic count varies by seed (not pinned at the pool size)",
+            $"counts=[{string.Join(",", restrictionCounts)}] distinct={distinctRestrictionCounts}");
+
+        // (c) Two runs must not share most of their content. Measured 12.9% after
+        // the fix; the pre-fix vocabulary reuse made the player perceive one set.
+        // 35/60 is a loose ceiling - it catches a collapse, not normal overlap.
+        int sharedPairs = 0, pairCount = 0, worstPair = 0;
+        for (int i = 0; i < perSeedDescriptions.Count; i++)
+        for (int j = i + 1; j < perSeedDescriptions.Count; j++)
+        {
+            int shared = perSeedDescriptions[i].Intersect(perSeedDescriptions[j]).Count();
+            sharedPairs += shared;
+            worstPair = Math.Max(worstPair, shared);
+            pairCount++;
+        }
+        Check(worstPair < 35,
+            "variety: no two seeds share most of their relic descriptions",
+            $"avg={sharedPairs / (double)pairCount:F1}/60 worst={worstPair}/60");
+
         // ---- 9. Downside weighting: the 1.4x downside bonus (140 vs 100) was
         // CANCELLED by user order 2026-09-17, so WeightOf is now a constant and
         // downside fragments draw uniformly with everything else. The observed

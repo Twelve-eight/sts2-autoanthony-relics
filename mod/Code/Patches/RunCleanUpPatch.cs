@@ -22,6 +22,12 @@ internal static class RunCleanUpPatch
         try
         {
             AnthonyRelicRunRegistry.ResetForRunEnd();
+            // Drop the loc updater's dedupe key with the registry (2026-09-18). It is keyed by
+            // seed + pool fingerprint, and LocManager.SetLanguage REPLACES the whole table set -
+            // so a language switch (or any table reload) wipes the injected entries while the key
+            // still matches, and the next capture for the same seed short-circuits without
+            // re-writing them. Clearing here makes the first capture of the next run re-inject.
+            AnthonyRelicLocUpdater.OnSeedCaptured(null);
             MainFile.Logger.Info($"[{MainFile.ModId}] run cleaned up: seed and definition cache reset");
         }
         catch (Exception e)
