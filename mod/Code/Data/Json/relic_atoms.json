@@ -1,7 +1,7 @@
 {
  "schema": "relic-atoms/v1",
  "source": "MegaCrit.Sts2.Core.Models.Relics (engine decompile)",
- "atomCount": 156,
+ "atomCount": 165,
  "atoms": [
   {
    "Id": "Akabeko#AfterSideTurnStart#0",
@@ -3340,6 +3340,222 @@
     "Values": [],
     "Condition": null,
     "Trigger": null
+   }
+  },
+  {
+   "Id": "QuriousHandRetain#AfterSideTurnStart#0",
+   "Source": "QuriousHandRetain",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "retain_hand_card",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "QuriousHandSly#AfterSideTurnStart#0",
+   "Source": "QuriousHandSly",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "sly_hand_card",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "QuriousHandEthereal#AfterSideTurnStart#0",
+   "Source": "QuriousHandEthereal",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "ethereal_hand_card",
+    "Variant": "immediate",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 2,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "turn_start",
+     "Lifetime": "combat"
+    }
+   }
+  },
+  {
+   "Id": "QuriousEnchantSharp#BeforeCombatStart#0",
+   "Source": "QuriousEnchantSharp",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "enchant_hand",
+    "Variant": "sharp",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "combat_start",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "QuriousEnchantNimble#BeforeCombatStart#0",
+   "Source": "QuriousEnchantNimble",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "enchant_hand",
+    "Variant": "nimble",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "combat_start",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "QuriousEnchantImbued#BeforeCombatStart#0",
+   "Source": "QuriousEnchantImbued",
+   "Rarity": "Uncommon",
+   "Spec": {
+    "Opcode": "enchant_hand",
+    "Variant": "imbued",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "combat_start",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "QuriousPickupSharp#AfterObtained#0",
+   "Source": "QuriousPickupSharp",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "enchant_deck",
+    "Variant": "sharp",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "QuriousPickupNimble#AfterObtained#0",
+   "Source": "QuriousPickupNimble",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "enchant_deck",
+    "Variant": "nimble",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
+   }
+  },
+  {
+   "Id": "QuriousPickupImbued#AfterObtained#0",
+   "Source": "QuriousPickupImbued",
+   "Rarity": "Rare",
+   "Spec": {
+    "Opcode": "enchant_deck",
+    "Variant": "imbued",
+    "Target": "self",
+    "Values": [
+     {
+      "Id": "amount",
+      "BaseValue": 1,
+      "Source": "fixed",
+      "Offset": 0,
+      "Upgradable": false
+     }
+    ],
+    "Condition": null,
+    "Trigger": {
+     "Kind": "obtained",
+     "Lifetime": "immediate"
+    }
    }
   }
  ]

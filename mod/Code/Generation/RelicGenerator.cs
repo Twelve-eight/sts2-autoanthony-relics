@@ -178,8 +178,15 @@ public static class RelicGenerator
     /// 8 sampled real seeds). The branch is now gated by
     /// <see cref="RestrictionRelicChancePercent"/>, so a run draws a
     /// seed-dependent SUBSET. RNG-shape change, same reason as v5->v6.
+    /// v8: extra pool + per-pool weights (user order 2026-09-18). Three changes
+    /// at once, all pool-shape or RNG-shape: (a) the extra pool adds 9 atoms and
+    /// therefore 9 name morphemes, which widens RelicText.AllSources - the tail
+    /// pool's floor - so EVERY seed's names change; (b) the sampling weights are
+    /// now configurable and must reach the definition cache key; (c) the extra
+    /// pool is gated per run. Same reason as v6->v7: a v7 save must regenerate
+    /// rather than be served relics whose names came from the old source set.
     /// </summary>
-    public const string SeedVersion = "relics-v7";
+    public const string SeedVersion = "relics-v8";
 
     /// <summary>Chance a slot samples a second effect (both bound to the trigger).</summary>
     private const int TwoEffectChancePercent = 30;
@@ -375,7 +382,25 @@ public static class RelicGenerator
             && effect.Target == EnemyTarget)
         || (trigger is null
             && effect.IsRestriction
-            && !RestrictionOffsets.ContainsKey(effect.Opcode));
+            && !RestrictionOffsets.ContainsKey(effect.Opcode))
+        // 6. Extra-pool toggle (user order 2026-09-18). The pool is built ONCE
+        //    with the extra atoms always present and the toggle is applied here,
+        //    not by rebuilding: rebuilding mid-run is exactly what the
+        //    definition cache key exists to avoid, and a rebuild would also make
+        //    the toggle invisible to the key. Gating at the eligibility
+        //    predicate keeps the pool fingerprint stable and puts the toggle in
+        //    the cache key instead (see GenerationSettings.Key).
+        || (effect.Pool == FragmentPoolKind.Extra && !GenerationSettings.Current.IncludeExtraPool)
+        // 7. Hand/deck effect timing (user order 2026-09-18). The extra pool's
+        //    hand effects can only be applied from the deferred post-draw pass,
+        //    so pairing one with any other trigger would ship a relic whose text
+        //    promises an effect no hook runs. The deck effects are the mirror
+        //    image: they run inline at `obtained` (the master deck exists outside
+        //    combat), so a per-turn trigger must never carry one.
+        || (effect.IsHandEffect
+            && (trigger is null || !EffectFragment.HandEffectTriggers.Contains(trigger.Kind)))
+        || (effect.IsDeckEffect
+            && (trigger is null || !EffectFragment.DeckEffectTriggers.Contains(trigger.Kind)));
 
     public static IReadOnlyList<GeneratedRelicDefinition> Generate(string runSeed, RelicFragmentPool pool)
     {
@@ -513,9 +538,10 @@ public static class RelicGenerator
 
         if (wantBenefit)
         {
-            EffectFragment? benefit = PickUniquely(random, pool.BenefitEffects,
+            EffectFragment? benefit = PickWeightedUniquely(random, pool.BenefitEffects,
                 e => usedPassives.Add(e.ShapeKey),
-                e => !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e))
+                e => !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e),
+                WeightOf)
                 ?? PickEligiblePassive(random, pool.BenefitEffects);
             if (benefit is not null)
             {
@@ -584,9 +610,16 @@ public static class RelicGenerator
         // Restrictions are excluded here on purpose - they may only enter
         // through the pairing branch above, otherwise this uniform draw would
         // emit a bare restriction with no offset.
-        EffectFragment? passive = PickUniquely(random, pool.PassiveEffects,
+        //
+        // These two draws go through the WEIGHTED picker (user order 2026-09-18:
+        // one weight per pool). Note this is only the fallback: when every
+        // eligible passive is already used, PickEligiblePassive re-serves one
+        // uniformly and deliberately ignores weights, so WeightPassiveCore does
+        // not govern the exhausted case.
+        EffectFragment? passive = PickWeightedUniquely(random, pool.PassiveEffects,
             e => usedPassives.Add(e.ShapeKey),
-            e => !e.IsRestriction && !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e))
+            e => !e.IsRestriction && !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e),
+            WeightOf)
             ?? PickEligiblePassive(random, pool.PassiveEffects.Where(e => !e.IsRestriction).ToList());
         if (passive is not null)
         {
@@ -843,13 +876,23 @@ public static class RelicGenerator
     }
 
     /// <summary>
-    /// Uniform for every fragment (user order 2026-09-17): the downside bonus
-    /// (140 vs 100) was cancelled, so this is now a constant. It is kept as a
-    /// hook rather than deleted because PickWeightedUniquely's signature and
-    /// the deterministic draw sequence are built around it - replacing it with
-    /// a literal would be a larger change for no behavioural difference.
+    /// Per-fragment sampling weight (user order 2026-09-18: the settings page
+    /// exposes one weight per effect pool).
+    ///
+    /// With every weight left at its default this reproduces the constant it was
+    /// from 2026-09-17 onward, so the default settings draw exactly as before.
+    ///
+    /// What the weight does NOT do: PickWeightedUniquely rolls exactly ONE
+    /// random.Next() per pick whether the weights are uniform or not, so a weight
+    /// never changes the cost of an individual pick. It DOES change the total
+    /// number of picks, because the chosen fragment steers control flow - a
+    /// restriction fragment triggers the offsetting-benefit draw, a benefit
+    /// fragment is drawn from a different band. That is expected and harmless:
+    /// the property that must hold is "same (seed, settings) -> same bytes",
+    /// which is what the settings component of the cache key guarantees, not
+    /// "a settings change preserves the draw count" (which is false and was
+    /// briefly asserted by the probe on 2026-09-19 before being corrected).
     /// </summary>
-    private static int WeightOf(EffectFragment effect) => NormalWeight;
-
+    private static int WeightOf(EffectFragment effect) => GenerationSettings.Current.WeightFor(effect);
     private const string ModId = "AutoAnthonyRelics";
 }

@@ -1,3 +1,71 @@
+## WS-0919-01 - 2026-09-19 - 额外词条池 + 每池生成权重 (SeedVersion v8)
+
+### 用户指令
+
+"扩遗物账本, 从怪异炼化遗物那里搬一点过来, 当作额外池, 做它的开关. 设置页面可调每种词条池的生成权重."
+
+### 交付
+
+1. **扩账本**: 从姊妹 mod QuriousCraftingRelics 的 extra 池搬 9 项(3 手牌关键词 + 6 附魔),
+   写入账本新段 `extraSupported`; 原子 156 -> **165**。
+2. **额外池 + 开关**: 新配置 `EnableExtraEffectPool`, **默认关**。
+3. **每池权重**: 4 个滑块(触发/被动/增益/额外), 默认 100/100/100/100。
+
+`SeedVersion` v7 -> **v8**(新增 9 个 name morpheme 会拓宽 `RelicText.AllSources`,
+从而改变**每个种子**的遗物名字; 权重与开关本身也是生成输入)。
+
+### 关键设计
+
+- **开关用"谓词门控", 不重建池**: `MainFile` 永远以 `includeExtraPool: true` 建池,
+  开关只作用于 `RelicGenerator.Excluded` 规则 6。重建池需要**在局中**发生, 而重建正是
+  定义缓存键要避免的事。
+- **设置进缓存键**: `GenerationSettings.Key` 把 5 个值(1 bool + 4 权重 x 10 bit)完美打包进
+  `long`, 作为 `AnthonyRelicRunRegistry` 键元组的第 4 个分量。用打包而非哈希, 因为哈希会存在
+  两组设置撞键、互相取到对方遗物的风险。**开局冻结**(seed 捕获点 `Freeze()`,
+  `ResetForRunEnd` 里 `Unfreeze()`), 防止局中改设置改变已持有遗物的含义。
+- **执行时机(初稿判断错误, 已修正)**: `combat_start`(`CombatManager.cs:594`)在 `StartTurn`(`:610`)
+  之前 -> 手牌为空, 手牌效果会遍历 0 张牌静默失效; 而 `turn_start`(`:783`)在 `:778` `await`
+  抽牌任务(`:924`)**之后** -> 手牌已存在。所以 `turn_start` 内联执行, 只有 `combat_start` 走
+  `AfterPlayerTurnStartLate` 延迟通道(以 `turn <= 1` 保持每场战斗一次语义)。
+  `enchant_deck` 作用于主牌组(`PileType.Deck => player.Deck`), 局外存在, 故在 `obtained` 内联。
+- 生成侧规则 7: 手牌效果只配 `turn_start`/`combat_start`, 牌组效果只配 `obtained`。
+- 延迟通道加**重复调用守卫**(RitsuLib 等框架会重发钩子, 否则开局手牌被附魔多次)。
+
+### 修掉的两个真实缺陷
+
+1. **跨 mod 配置键碰撞(我引入的, 已修 + 已恢复用户数据)**: 新属性最初叫 `EnableExtraPool`,
+   与 Qurious `KnownLegacyScalarKeys` 里的旧键同名; 又因两 mod 的 cfg **文件名相同**
+   (BaseLib 用根命名空间推导, Qurious 由 `AutoAnthonyRelics` 改名而来), Qurious 的迁移
+   (当时判据为"任一键匹配即认领")把 **AAR 的配置整个偷走**。两侧修复: AAR 改名
+   `EnableExtraEffectPool`; Qurious 判据收紧为 all-or-nothing。用户配置已还原, 实机确认
+   `cfg migrated` 不再出现。
+2. **`GenerationSettings` 的 `Nullable<self>` 布局环**: `private static GenerationSettings? _frozen`
+   让加载器陷入循环布局依赖, 任何访问都 `TypeLoadException`。改为普通字段 + 显式 flag。
+
+### 顺带修掉的既有错误断言
+
+`tools/relic-eligibility-probe` 的"被动带 15% +- 3"断言**在 HEAD(f1c34cc)上就已失败**
+(实测 10.97%, 本次 11.23%)。根因: 8 个被动词条里 6 个是 restriction, 只剩 2 个普通被动,
+一局约 9 个被动带槽位消耗完后落到触发路径, restriction 分支仅 30% 触发 -> 有效值结构性
+低于标称值。该断言已改为"不超过标称 15%" + "仍被填充(>= 8%)", 并在文档写明这是内容量限制。
+
+### 验证(实测输出)
+
+- `tools/relic-probe`: PROBE OK。含额外池**双向**可达性(关闭时从不被抽到; 开启时 200 seed 全可达)、
+  权重改变抽中组合、同 (seed, settings) 可复现、时机规则无违规配对。
+  **判别力验证**(故意破坏后确认会失败): `WeightOf` 退回常量 -> 2 项 FAIL;
+  开关谓词短路 -> 1 项 FAIL; 规则 7 手牌子句短路 -> 1 项 FAIL。
+- `tools/relic-eligibility-probe`: PROBE OK。规则 6/7 与独立 oracle 表逐对一致;
+  短路规则 7 -> FAIL(并有非空泛性守卫)。
+  为使该 oracle 继续可用, `GenerationSettings` 刻意不引用 BaseLib(配置经 `ConfigSource` 委托注入)。
+- `tools/migration-probe`(Qurious 侧): PROBE OK, 含"外来 cfg 不被认领"。
+- **实机**(`E:\Slay the Spire 2`, d3d12): 启动行 `relic pool: 165 extracted atoms,
+  47 ledger-supported (+9 extra) ... seedVersion=relics-v8`; AAR 零异常, 9 个补丁类全挂载;
+  5 个新配置项被 BaseLib 写入 cfg; 把开关置 True 后日志变为 `extraPool=True`, 证明
+  配置 -> BaseLib -> `ConfigSource` -> `GenerationSettings` 全链路打通。
+- **未覆盖**: 手牌效果在真实战斗中的实际生效(需玩家开局并打开额外池; 后台输入对 Godot 无效),
+  MP 两端一致性。
+
 ## WS-0916-05 - 2026-09-16 - 生成期执行上下文合法性 (SeedVersion v4)
 
 ### 问题

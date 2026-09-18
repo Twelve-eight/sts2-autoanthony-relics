@@ -83,9 +83,23 @@ public sealed record LedgerRejected
     public string? Evidence { get; init; }
 }
 
-public sealed record RelicLedger(IReadOnlyList<LedgerEntry> Supported, IReadOnlyList<LedgerRejected> Rejected)
+/// <summary>
+/// The hand-audited ledger.
+///
+/// <paramref name="ExtraSupported"/> is the OPT-IN pool (user order 2026-09-18):
+/// atoms ported from the sister mod QuriousCraftingRelics' extra catalog. They
+/// are kept in their own list rather than merged into
+/// <paramref name="Supported"/> so the two pools stay separable in code, in the
+/// fingerprint and in the settings toggle - "which pool did this fragment come
+/// from" must be answerable from data, not inferred from its opcode.
+/// </summary>
+public sealed record RelicLedger(
+    IReadOnlyList<LedgerEntry> Supported,
+    IReadOnlyList<LedgerRejected> Rejected,
+    IReadOnlyList<LedgerEntry> ExtraSupported)
 {
-    public static readonly RelicLedger Empty = new(Array.Empty<LedgerEntry>(), Array.Empty<LedgerRejected>());
+    public static readonly RelicLedger Empty = new(
+        Array.Empty<LedgerEntry>(), Array.Empty<LedgerRejected>(), Array.Empty<LedgerEntry>());
 }
 
 /// <summary>
@@ -121,7 +135,10 @@ public static class RelicAtomData
         {
             throw new InvalidDataException("relic_atom_ledger.json: unparsable");
         }
-        return new RelicLedger(parsed.Supported ?? Array.Empty<LedgerEntry>(), parsed.Rejected ?? Array.Empty<LedgerRejected>());
+        return new RelicLedger(
+            parsed.Supported ?? Array.Empty<LedgerEntry>(),
+            parsed.Rejected ?? Array.Empty<LedgerRejected>(),
+            parsed.ExtraSupported ?? Array.Empty<LedgerEntry>());
     }
 
     private static string ReadEmbedded(string fileName)
@@ -148,6 +165,7 @@ public static class RelicAtomData
         public string? Schema { get; init; }
         public IReadOnlyList<LedgerEntry>? Supported { get; init; }
         public IReadOnlyList<LedgerRejected>? Rejected { get; init; }
+        public IReadOnlyList<LedgerEntry>? ExtraSupported { get; init; }
     }
 #pragma warning restore CS8632
 }

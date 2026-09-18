@@ -26,6 +26,14 @@ public sealed record EffectFragment(
     IReadOnlyList<string> SourceAtoms,
     string? Condition = null)
 {
+    /// <summary>
+    /// Which authored pool this fragment came from. Set from the LEDGER SECTION
+    /// it was listed under (supported vs extraSupported), never inferred from
+    /// the opcode: the settings toggle must be able to switch a pool off as
+    /// data, and the same opcode could legitimately appear in both pools later.
+    /// </summary>
+    public FragmentPoolKind Pool { get; init; } = FragmentPoolKind.Core;
+
     public string Key => $"{Opcode}|{Variant ?? "-"}|{Target ?? "-"}|{IsPassive}|{ValuesKey}";
 
     /// <summary>Shape without values: same-shape fragments must not co-exist in one relic.</summary>
@@ -44,6 +52,9 @@ public sealed record EffectFragment(
     public static readonly HashSet<string> DownsideOpcodes = new(StringComparer.Ordinal)
     {
         "lose_hp", "lose_max_hp", "lose_gold", "add_curse",
+        // Extra pool (user order 2026-09-18): hand Ethereal exhausts the card at
+        // end of turn, which is a pure cost for the owner.
+        "ethereal_hand_card",
     };
 
     public bool IsDownside => DownsideOpcodes.Contains(Opcode);
@@ -89,6 +100,67 @@ public sealed record EffectFragment(
     public bool IsBenefit => BenefitOpcodes.Contains(Opcode);
 
     /// <summary>
+    /// Extra-pool opcodes (user order 2026-09-18) whose target is the owner's
+    /// HAND, i.e. the effects that need a populated hand to do anything.
+    ///
+    /// WHY THIS SET EXISTS: the hand is drawn inside SetupPlayerTurn, so an
+    /// effect on the hand is a no-op at any hook that fires before that draw.
+    /// Verified in the decompile (CombatManager):
+    /// - <c>:594</c> BeforeCombatStart (combat_start) - before StartTurn, no hand.
+    /// - <c>:721</c> BeforeSideTurnStart (turn_start_early) - no hand.
+    /// - <c>:778</c> awaits the SetupPlayerTurn task, whose <c>:924</c> draws.
+    /// - <c>:783</c> AfterSideTurnStart (turn_start) - hand IS present.
+    /// So `turn_start` may run these inline, while `combat_start` must defer to
+    /// the post-draw pass. QuriousCraftingRelics hit the same wall and moved its
+    /// combat-start enchants to AfterPlayerTurnStartLate
+    /// (ChaosRelicModel.cs:519 "the hand is empty and every enchant loop
+    /// iterated zero cards").
+    ///
+    /// The generator may only pair these opcodes with
+    /// <see cref="HandEffectTriggers"/>; anything else would ship a relic whose
+    /// text promises an effect no hook ever runs.
+    /// </summary>
+    public static readonly HashSet<string> HandEffectOpcodes = new(StringComparer.Ordinal)
+    {
+        "retain_hand_card", "sly_hand_card", "ethereal_hand_card", "enchant_hand",
+    };
+
+    /// <summary>
+    /// The only triggers a <see cref="HandEffectOpcodes"/> effect may ride.
+    /// <c>turn_start</c> runs them inline (hand present). <c>combat_start</c>
+    /// runs them from the deferred post-draw pass, gated to the first turn so
+    /// the source's once-per-combat meaning survives - which is exactly what
+    /// QuriousCraftingRelics does with its <c>turn &lt;= 1</c> check.
+    /// <c>turn_start_early</c> is excluded because no hand exists there.
+    /// </summary>
+    public static readonly HashSet<string> HandEffectTriggers = new(StringComparer.Ordinal)
+    {
+        "turn_start", "combat_start",
+    };
+
+    /// <summary>
+    /// Extra-pool opcodes whose target is the owner's MASTER DECK. The deck
+    /// exists outside combat, so these run inline at their trigger - but they
+    /// are restricted to <c>obtained</c>, mirroring the source content
+    /// (QuriousCraftingRelics' <c>X_PICKUP_*</c> templates fire on pickup) and
+    /// keeping a per-turn deck-wide enchant from being reachable.
+    /// </summary>
+    public static readonly HashSet<string> DeckEffectOpcodes = new(StringComparer.Ordinal)
+    {
+        "enchant_deck",
+    };
+
+    /// <summary>The only trigger a <see cref="DeckEffectOpcodes"/> effect may ride.</summary>
+    public static readonly HashSet<string> DeckEffectTriggers = new(StringComparer.Ordinal)
+    {
+        "obtained",
+    };
+
+    public bool IsHandEffect => HandEffectOpcodes.Contains(Opcode);
+
+    public bool IsDeckEffect => DeckEffectOpcodes.Contains(Opcode);
+
+    /// <summary>
     /// Opcodes whose engine command needs a live combat context (energy /
     /// block / draw pile / enemies) and NREs without one: the executor skips
     /// them, with a log line, when the owner has no PlayerCombatState
@@ -105,6 +177,13 @@ public sealed record EffectFragment(
     public static readonly HashSet<string> CombatScopedOpcodes = new(StringComparer.Ordinal)
     {
         "apply_power", "gain_block", "gain_energy", "draw_cards", "deal_damage",
+        // Extra pool (user order 2026-09-18). These reach into the owner's HAND,
+        // which only exists inside a combat: without this rule the generator
+        // could pair them with `obtained` or `gold_gained` (both reachable with
+        // no PlayerCombatState) and the relic would carry dead text. The
+        // `enchant_deck` variants are deliberately NOT listed - they operate on
+        // the deck and are meant to run at obtain time, outside combat.
+        "retain_hand_card", "sly_hand_card", "ethereal_hand_card", "enchant_hand",
     };
 
     public int Amount => ValueOf("amount", 0);
@@ -129,6 +208,16 @@ public sealed record EffectFragment(
 /// at startup; the generator samples from these only, so an atom without a
 /// hand-verified ledger entry can never reach a generated relic.
 /// </summary>
+/// <summary>Which authored pool a fragment belongs to (user order 2026-09-18).</summary>
+public enum FragmentPoolKind
+{
+    /// <summary>The original pool: vanilla + Ancient atoms from the main ledger.</summary>
+    Core,
+
+    /// <summary>The opt-in pool ported from QuriousCraftingRelics' extra catalog.</summary>
+    Extra,
+}
+
 public sealed class RelicFragmentPool
 {
     public static readonly RelicFragmentPool EmptyInstance = new(
@@ -184,8 +273,15 @@ public sealed class RelicFragmentPool
     /// Ledger fixes are applied first (they carry the hand-verified
     /// correction), then the atom spec is split into its trigger part and its
     /// effect part. An atom with no Trigger in its spec is a passive.
+    ///
+    /// <paramref name="includeExtraPool"/> joins the ledger's
+    /// <c>extraSupported</c> atoms (user order 2026-09-18). The flag is a
+    /// generation input, so it MUST reach the pool fingerprint - otherwise
+    /// toggling it would serve a stale cached definition set. Callers get that
+    /// for free because <see cref="Fingerprint"/> is computed from the built
+    /// contents (see its own note).
     /// </summary>
-    public static RelicFragmentPool Build(RelicAtomPool atoms, RelicLedger ledger)
+    public static RelicFragmentPool Build(RelicAtomPool atoms, RelicLedger ledger, bool includeExtraPool)
     {
         var byId = new Dictionary<string, RelicAtom>(StringComparer.Ordinal);
         foreach (RelicAtom atom in atoms.Atoms)
@@ -199,14 +295,22 @@ public sealed class RelicFragmentPool
         var benefits = new Dictionary<string, EffectFragment>(StringComparer.Ordinal);
         int supported = 0;
 
-        foreach (LedgerEntry entry in ledger.Supported)
+        // Core first, then extra: identical shapes across the two pools fold
+        // into ONE fragment with unioned provenance (the dedup below), so the
+        // extra pool can never silently duplicate a core effect. A fragment
+        // both pools contribute stays Core - the extra pool is the opt-in
+        // ADDITION, so a shape the core pool already ships must not vanish when
+        // the extra pool is switched off.
+        foreach ((LedgerEntry entry, FragmentPoolKind kind) in EnumerateEntries(ledger, includeExtraPool))
         {
             if (!byId.TryGetValue(entry.AtomId, out RelicAtom? atom))
             {
                 throw new InvalidOperationException($"ledger entry {entry.AtomId} has no matching atom");
             }
-            supported++;
-
+            if (kind == FragmentPoolKind.Core)
+            {
+                supported++;
+            }
             Data.LedgerFix fix = entry.Fix ?? new Data.LedgerFix();
             Data.RelicSpec spec = atom.Spec;
 
@@ -244,7 +348,10 @@ public sealed class RelicFragmentPool
             string? effectCondition = isPassive
                 ? (fix.Condition ?? spec.Condition?.Kind)
                 : null;
-            var effect = new EffectFragment(opcode, variant, target, values, isPassive, new[] { atom.Id }, effectCondition);
+            var effect = new EffectFragment(opcode, variant, target, values, isPassive, new[] { atom.Id }, effectCondition)
+            {
+                Pool = kind,
+            };
             // Passive fragments split by polarity: strict benefits ride their
             // own 5% gate, everything else (hand-draw modifiers either sign,
             // restriction affixes) rides the passive gate.
@@ -263,7 +370,11 @@ public sealed class RelicFragmentPool
             // the whole set.
             if (bucket.TryGetValue(effect.Key, out EffectFragment? existing))
             {
-                effect = effect with { SourceAtoms = Union(existing.SourceAtoms, atom.Id) };
+                effect = effect with
+                {
+                    SourceAtoms = Union(existing.SourceAtoms, atom.Id),
+                    Pool = existing.Pool == FragmentPoolKind.Core ? FragmentPoolKind.Core : kind,
+                };
             }
             bucket[effect.Key] = effect;
 
@@ -288,6 +399,31 @@ public sealed class RelicFragmentPool
             passives.Values.OrderBy(e => e.Key, StringComparer.Ordinal).ToArray(),
             benefits.Values.OrderBy(e => e.Key, StringComparer.Ordinal).ToArray(),
             supported);
+    }
+
+    /// <summary>
+    /// The ledger entries to build from, each tagged with its pool: the core
+    /// <c>supported</c> list, then - only when the extra pool is enabled - the
+    /// <c>extraSupported</c> list. Ordering is stable (core before extra) so the
+    /// dedup's unioned provenance is a pure function of the data, and so the
+    /// built pool is byte-identical across runs for the same inputs.
+    /// </summary>
+    private static IEnumerable<(LedgerEntry Entry, FragmentPoolKind Kind)> EnumerateEntries(
+        RelicLedger ledger,
+        bool includeExtraPool)
+    {
+        foreach (LedgerEntry entry in ledger.Supported)
+        {
+            yield return (entry, FragmentPoolKind.Core);
+        }
+        if (!includeExtraPool)
+        {
+            yield break;
+        }
+        foreach (LedgerEntry entry in ledger.ExtraSupported)
+        {
+            yield return (entry, FragmentPoolKind.Extra);
+        }
     }
 
     /// <summary>

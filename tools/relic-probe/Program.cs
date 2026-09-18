@@ -21,6 +21,53 @@ internal static class Program
 {
     private static int _failures;
 
+    /// <summary>
+    /// Freeze/unfreeze generation settings from the probe. A thin shim so the
+    /// probe never has to name GenerationSettings' members directly: the type is
+    /// internal (its members are an implementation detail of the generator) and
+    /// this keeps that boundary in one place.
+    /// </summary>
+    private static class GenerationSettingsTest
+    {
+        public static void Set(bool? includeExtraPool = null, int? weightTriggered = null,
+            int? weightPassive = null, int? weightBenefit = null, int? weightExtra = null) =>
+            GenerationSettings.FreezeExplicit(
+                includeExtraPool ?? false,
+                weightTriggered ?? 100, weightPassive ?? 100, weightBenefit ?? 100, weightExtra ?? 100);
+
+        public static void Reset() => GenerationSettings.Unfreeze();
+    }
+
+    /// <summary>
+    /// The multiset of drawn effect keys over N seeds under one weight profile.
+    /// Ordinal-sorted so two profiles can be compared with SequenceEqual; the
+    /// point is to prove the profile CHANGES the composition, not to pin a
+    /// specific distribution (which would over-constrain the generator).
+    /// </summary>
+    private static List<string> DrawComposition(RelicFragmentPool pool, int seeds, int weightTriggered,
+        int weightPassive, int weightBenefit, int weightExtra)
+    {
+        GenerationSettingsTest.Set(weightTriggered: weightTriggered, weightPassive: weightPassive,
+            weightBenefit: weightBenefit, weightExtra: weightExtra);
+        try
+        {
+            var drawn = new List<string>();
+            for (int i = 0; i < seeds; i++)
+            {
+                foreach (var d in RelicGenerator.Generate($"weight-mix-{i}", pool))
+                {
+                    foreach (var e in d.Effects) drawn.Add(e.Key);
+                }
+            }
+            drawn.Sort(StringComparer.Ordinal);
+            return drawn;
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+    }
+
     private static void Check(bool condition, string label, string detail = "")
     {
         if (condition)
@@ -69,10 +116,28 @@ internal static class Program
         // ---- 1. Ledger integrity: every supported entry resolves; Build throws otherwise.
         RelicAtomPool atoms = RelicAtomData.LoadAtoms();
         RelicLedger ledger = RelicAtomData.LoadLedger();
-        RelicFragmentPool pool = RelicFragmentPool.Build(atoms, ledger);
-        Check(atoms.Atoms.Count == 156, "atom pool loads 156 atoms", $"{atoms.Atoms.Count}");
+        RelicFragmentPool pool = RelicFragmentPool.Build(atoms, ledger, includeExtraPool: true);
+        Check(atoms.Atoms.Count == 165, "atom pool loads 165 atoms", $"{atoms.Atoms.Count}");
         Check(ledger.Supported.Count == 47, "ledger has 47 supported entries", $"{ledger.Supported.Count}");
+        Check(ledger.ExtraSupported.Count == 9, "ledger has 9 extra-pool entries", $"{ledger.ExtraSupported.Count}");
         Check(ledger.Rejected.Count == 26, "ledger has 26 rejected entries", $"{ledger.Rejected.Count}");
+        // Extra pool off must build a pool WITHOUT the extra shapes, and the extra
+        // flag must not be able to remove a core shape (the dedup folds Pool to
+        // Core). Compared by fragment count, not by fingerprint. All 9 extra
+        // atoms carry a Trigger (3 turn_start, 3 combat_start, 3 obtained), so
+        // they are all TRIGGERED effects - the passive side must be unchanged.
+        RelicFragmentPool coreOnly = RelicFragmentPool.Build(atoms, ledger, includeExtraPool: false);
+        Check(coreOnly.TriggeredEffects.Count == pool.TriggeredEffects.Count - 9
+              && coreOnly.PassiveEffects.Count == pool.PassiveEffects.Count
+              && coreOnly.Triggers.Count == pool.Triggers.Count,
+            "extra pool off removes exactly the 9 extra triggered fragments",
+            $"triggered {coreOnly.TriggeredEffects.Count} vs {pool.TriggeredEffects.Count}, " +
+            $"passives {coreOnly.PassiveEffects.Count} vs {pool.PassiveEffects.Count}, " +
+            $"triggers {coreOnly.Triggers.Count} vs {pool.Triggers.Count}");
+        Check(pool.TriggeredEffects.Count(e => e.Pool == FragmentPoolKind.Extra) == 9
+              && pool.PassiveEffects.All(e => e.Pool == FragmentPoolKind.Core)
+              && coreOnly.TriggeredEffects.All(e => e.Pool == FragmentPoolKind.Core),
+            "extra-pool fragments are tagged, and absent when the pool is off");
         Check(pool.Triggers.Count >= 10, "trigger fragments >= 10", $"{pool.Triggers.Count}");
         Check(pool.TriggeredEffects.Count >= 12, "triggered effect fragments >= 12", $"{pool.TriggeredEffects.Count}");
         Check(pool.PassiveEffects.Count >= 2, "passive fragments >= 2", $"{pool.PassiveEffects.Count}");
@@ -95,7 +160,8 @@ internal static class Program
         // in the executor's supported set (mirrors AnthonyRelicModel's switch;
         // variant is significant for apply_power and the downside opcodes
         // lose_hp / lose_gold / add_curse, wildcard "-" elsewhere).
-        var variantSignificant = new HashSet<string> { "apply_power", "lose_hp", "lose_gold", "add_curse" };
+        var variantSignificant = new HashSet<string> { "apply_power", "lose_hp", "lose_gold", "add_curse",
+            "enchant_hand", "enchant_deck" };
         var supported = new HashSet<string>
         {
             "apply_power|vigor|self|False", "apply_power|strength|self|False", "apply_power|thorns|self|False",
@@ -107,6 +173,13 @@ internal static class Program
             "lose_gold|immediate|self|False", "lose_gold|all|self|False",
             "add_curse|greed|self|False", "add_curse|curse_of_the_bell|self|False",
             "add_curse|enthralled|self|False", "add_curse|folly|self|False",
+            // Extra pool (user order 2026-09-18), ported from QuriousCraftingRelics.
+            "retain_hand_card|-|self|False", "sly_hand_card|-|self|False",
+            "ethereal_hand_card|-|self|False",
+            "enchant_hand|sharp|self|False", "enchant_hand|nimble|self|False",
+            "enchant_hand|imbued|self|False",
+            "enchant_deck|sharp|self|False", "enchant_deck|nimble|self|False",
+            "enchant_deck|imbued|self|False",
         };
         // Passive opcodes the executor implements (mirrors RelicGenerator.PassiveOpcodes).
         // Was { "modify_hand_draw" } only; the Ancient restriction/benefit affixes
@@ -161,8 +234,9 @@ internal static class Program
 
         // ---- 4b. Downside pool (user order 2026-09-15): downside fragments
         // from ALL relic sources incl. Ancient/Event, weighted 140 vs 100.
+        // 11 core + 1 extra (ethereal_hand_card, user order 2026-09-18).
         var downsides = pool.TriggeredEffects.Where(e => e.IsDownside).ToList();
-        Check(downsides.Count == 11, "downside fragments: 11", $"{downsides.Count}");
+        Check(downsides.Count == 12, "downside fragments: 12", $"{downsides.Count}");
         Check(downsides.All(d => !d.IsPassive), "all downsides are triggered effects");
         Check(downsides.Count(d => d.Opcode == "add_curse") == 4, "four curse downsides");
         Check(downsides.Any(d => d.Opcode == "add_curse" && d.Variant == "greed"),
@@ -281,12 +355,146 @@ internal static class Program
             $"{usageTriggers.Count}/{pool.Triggers.Count}");
         // Max-HP policy (user order 2026-09-15): the +1 max-HP fragment shared
         // by ChosenCheese (combat end) / DragonFruit (gold gained) is
-        // unsampleable by design, so it is the ONLY fragment allowed missing.
+        // unsampleable by design, so it is the ONLY core fragment allowed
+        // missing. Extra-pool fragments are ALSO expected missing here: the
+        // default settings have EnableExtraEffectPool off, and the whole point of the
+        // toggle is that those fragments do not participate (RelicGenerator
+        // .Excluded rule 6). Asserting them reachable with the pool off would be
+        // asserting the toggle does nothing.
         var allEffectKeys = pool.TriggeredEffects.Concat(pool.PassiveEffects).Select(e => e.Key).ToList();
         var missing = allEffectKeys.Where(k => !usageEffects.Contains(k)).ToList();
-        Check(missing.All(k => k.StartsWith("gain_max_hp|", StringComparison.Ordinal)),
-            "soak: only max-HP-policy fragments unreachable",
+        Check(missing.All(k => k.StartsWith("gain_max_hp|", StringComparison.Ordinal)
+                               || pool.TriggeredEffects.Any(e => e.Key == k && e.Pool == FragmentPoolKind.Extra)),
+            "soak: only max-HP-policy and extra-pool fragments unreachable",
             missing.Count == 0 ? "none missing" : string.Join(",", missing));
+        // The extra pool must be genuinely unreachable with the toggle off -
+        // i.e. it is not merely "rare", it never appears.
+        Check(!usageEffects.Any(k => pool.TriggeredEffects.Any(e => e.Key == k && e.Pool == FragmentPoolKind.Extra)),
+            "soak: extra-pool fragments never sampled while the pool is off");
+
+        // ---- 8a2. EXTRA POOL REACHABLE WHEN ENABLED (user order 2026-09-18).
+        // The mirror of the check above: with the toggle ON the extra fragments
+        // must actually be sampleable. Done through GenerationSettings.Freeze so
+        // the toggle reaches the generator the same way it does at run start.
+        var extraOnUsage = new HashSet<string>(StringComparer.Ordinal);
+        var extraOnTriggers = new HashSet<string>(StringComparer.Ordinal);
+        GenerationSettingsTest.Set(includeExtraPool: true);
+        try
+        {
+            for (int i = 0; i < 200; i++)
+            {
+                foreach (var d in RelicGenerator.Generate($"extra-{i}", pool))
+                {
+                    if (d.Trigger is not null) extraOnTriggers.Add(d.Trigger.Key);
+                    foreach (var e in d.Effects) extraOnUsage.Add(e.Key);
+                }
+            }
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        var extraKeys = pool.TriggeredEffects.Where(e => e.Pool == FragmentPoolKind.Extra).Select(e => e.Key).ToList();
+        var extraMissing = extraKeys.Where(k => !extraOnUsage.Contains(k)).ToList();
+        Check(extraKeys.Count == 9 && extraMissing.Count == 0,
+            "extra pool enabled: all 9 extra fragments reachable in 200 seeds",
+            extraMissing.Count == 0 ? "all reachable" : string.Join(",", extraMissing));
+
+        // ---- 8a3. THE WEIGHT ACTUALLY STEERS THE DRAW (user order 2026-09-18).
+        // Compares the composition of the drawn set under two very different
+        // weight profiles on the same seeds. A weight that is read but ignored
+        // (or a picker that still hardcodes NormalWeight) would make these two
+        // multisets identical.
+        var baseline = DrawComposition(pool, seeds: 120, weightTriggered: 100, weightPassive: 100, weightBenefit: 100, weightExtra: 100);
+        var skewed = DrawComposition(pool, seeds: 120, weightTriggered: 400, weightPassive: 0, weightBenefit: 0, weightExtra: 100);
+        Check(baseline.Count > 0 && skewed.Count > 0 && !baseline.SequenceEqual(skewed),
+            "weight: a skewed profile changes the drawn effect mix",
+            $"baseline={baseline.Count} entries, skewed={skewed.Count} entries");
+
+        // ---- 8a4. SETTINGS ARE PART OF THE RESULT IDENTITY.
+        // The property that actually matters and that the cache key encodes:
+        // for one (seed, settings) pair the output is byte-identical, and the
+        // SAME seed under a DIFFERENT settings profile is allowed to differ -
+        // otherwise the settings would not be generation inputs at all.
+        //
+        // NOT asserted here: "a weight change preserves the draw count". That is
+        // false and was briefly asserted on 2026-09-19: the picked fragment
+        // steers control flow (a restriction fragment pulls in the offsetting
+        // benefit draw, a benefit fragment comes from another band), so the
+        // total number of picks legitimately differs. The invariant that does
+        // hold is per-pick: PickWeightedUniquely rolls exactly one Next() per
+        // pick regardless of weights.
+        bool settingsStable = true;
+        bool settingsMatter = false;
+        GenerationSettingsTest.Set();
+        try
+        {
+            var a = RelicGenerator.Generate("settings-id", pool);
+            var b = RelicGenerator.Generate("settings-id", pool);
+            settingsStable = a.Select(d => d.NameEn).SequenceEqual(b.Select(d => d.NameEn));
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        GenerationSettingsTest.Set(weightTriggered: 400, weightPassive: 0, weightBenefit: 0, weightExtra: 400);
+        try
+        {
+            var skewedRun = RelicGenerator.Generate("settings-id", pool);
+            GenerationSettingsTest.Reset();
+            var baseRun = RelicGenerator.Generate("settings-id", pool);
+            settingsMatter = !skewedRun.Select(d => d.NameEn).SequenceEqual(baseRun.Select(d => d.NameEn));
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        Check(settingsStable, "settings: one (seed, settings) pair is reproducible");
+        Check(settingsMatter, "settings: a skewed profile changes the generated set for the same seed");
+
+        // ---- 8a5. HAND/Deck EFFECT TIMING (user order 2026-09-18).
+        // The generator's rules 7 must keep hand effects off pre-draw triggers
+        // and deck effects on `obtained` only. This is the check that would have
+        // caught the 2026-09-19 defect where every hand effect was skipped at
+        // execution time (the hand is empty at BeforeCombatStart) while the text
+        // still promised it. Asserted over the extra pool ENABLED, since that is
+        // the only configuration in which these fragments can be drawn.
+        var badPairings = new List<string>();
+        GenerationSettingsTest.Set(includeExtraPool: true);
+        try
+        {
+            for (int i = 0; i < 200; i++)
+            {
+                foreach (var d in RelicGenerator.Generate($"timing-{i}", pool))
+                {
+                    foreach (var e in d.Effects)
+                    {
+                        string kind = d.Trigger?.Kind ?? "(passive)";
+                        if (e.IsHandEffect && !EffectFragment.HandEffectTriggers.Contains(kind))
+                        {
+                            badPairings.Add($"{e.Key} on {kind}");
+                        }
+                        if (e.IsDeckEffect && !EffectFragment.DeckEffectTriggers.Contains(kind))
+                        {
+                            badPairings.Add($"{e.Key} on {kind}");
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        Check(badPairings.Count == 0,
+            "timing: hand effects only on post-draw triggers, deck effects only on obtained",
+            badPairings.Count == 0 ? "none" : string.Join(" | ", badPairings.Distinct().Take(4)));
+        // And the rule must be load-bearing: the hand-effect trigger set must be
+        // a strict subset of the pool's triggers, or the rule above is vacuous.
+        Check(EffectFragment.HandEffectTriggers.Count < pool.Triggers.Count
+              && EffectFragment.HandEffectTriggers.All(k => pool.Triggers.Any(t => t.Kind == k)),
+            "timing: hand-effect trigger set is a non-trivial subset of the pool's triggers",
+            $"hand={string.Join(",", EffectFragment.HandEffectTriggers)} pool={pool.Triggers.Count}");
 
         // ---- 8b. CROSS-SEED VARIETY (defect report 2026-09-18).
         //
@@ -498,7 +706,7 @@ internal static class Program
 
         // The fingerprint component: two pools with different content must produce different
         // fingerprints, or the fingerprint term in the key is inert.
-        var altPool = RelicFragmentPool.Build(atoms, ledger);
+        var altPool = RelicFragmentPool.Build(atoms, ledger, includeExtraPool: true);
         Check(altPool.Fingerprint == pool.Fingerprint,
             "registry: rebuilding the same ledger yields the same fingerprint (deterministic)");
         Check(pool.Fingerprint.Length == 16 && pool.Fingerprint.All(Uri.IsHexDigit),

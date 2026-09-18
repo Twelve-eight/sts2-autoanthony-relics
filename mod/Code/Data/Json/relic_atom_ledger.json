@@ -501,5 +501,62 @@
    "reason": "extractor swapped the vars: stored gain_energy 3, engine is +1 Energy with LoseGold 3 (downside supported as #1)",
    "evidence": "SealOfGold.cs:22-31"
   }
+ ],
+ "extraPool": "user order 2026-09-18: ported from the sister mod QuriousCraftingRelics' extra pool (ChaosRelicExtraCatalog). OFF by default; EnableExtraEffectPool joins these atoms to the generation pool. Watcher-stance templates (X_STANCE_*) are deliberately NOT ported: they need the external Watcher mod (EnterWrath has 0 matches in the engine decompile; Qurious reflection-invokes it and skips when absent). X_RETAIN_ENERGY_DISCOUNT / X_RETAIN_ATTACK_BUFF are not ported either: they need cross-turn retained-card counter state, which this mod's executor has no architecture for - the same reason such atoms are rejected above.",
+ "extraSupported": [
+  {
+   "atomId": "QuriousHandRetain#AfterSideTurnStart#0",
+   "fix": {},
+   "evidence": "CardModel.GiveSingleTurnRetain (CardModel.cs:1348)",
+   "note": "give up to 2 random hand cards single-turn Retain each turn"
+  },
+  {
+   "atomId": "QuriousHandSly#AfterSideTurnStart#0",
+   "fix": {},
+   "evidence": "CardModel.GiveSingleTurnSly (CardModel.cs:1357)",
+   "note": "give up to 2 random hand cards single-turn Sly each turn"
+  },
+  {
+   "atomId": "QuriousHandEthereal#AfterSideTurnStart#0",
+   "fix": {},
+   "evidence": "CardModel.AddKeyword + CardKeyword.Ethereal (CardModel.cs:1330)",
+   "note": "add Ethereal to up to 2 random hand cards each turn (downside)"
+  },
+  {
+   "atomId": "QuriousEnchantSharp#BeforeCombatStart#0",
+   "fix": {},
+   "evidence": "CardCmd.Enchant<T> (CardCmd.cs:520)",
+   "note": "enchant 1 random hand attack card with Sharp at combat start"
+  },
+  {
+   "atomId": "QuriousEnchantNimble#BeforeCombatStart#0",
+   "fix": {},
+   "evidence": "CardCmd.Enchant<T> (CardCmd.cs:520)",
+   "note": "enchant 1 random block-gaining hand card with Nimble at combat start"
+  },
+  {
+   "atomId": "QuriousEnchantImbued#BeforeCombatStart#0",
+   "fix": {},
+   "evidence": "CardCmd.Enchant<T> (CardCmd.cs:520)",
+   "note": "enchant 1 random hand skill card with Imbued at combat start"
+  },
+  {
+   "atomId": "QuriousPickupSharp#AfterObtained#0",
+   "fix": {},
+   "evidence": "CardCmd.Enchant<T> (CardCmd.cs:520)",
+   "note": "enchant 1 random deck attack card with Sharp on obtain"
+  },
+  {
+   "atomId": "QuriousPickupNimble#AfterObtained#0",
+   "fix": {},
+   "evidence": "CardCmd.Enchant<T> (CardCmd.cs:520)",
+   "note": "enchant 1 random block-gaining deck card with Nimble on obtain"
+  },
+  {
+   "atomId": "QuriousPickupImbued#AfterObtained#0",
+   "fix": {},
+   "evidence": "CardCmd.Enchant<T> (CardCmd.cs:520)",
+   "note": "enchant 1 random deck skill card with Imbued on obtain"
+  }
  ]
 }

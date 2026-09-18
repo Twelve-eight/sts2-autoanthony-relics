@@ -71,6 +71,14 @@
     -->
     <ItemGroup>
         <InternalsVisibleTo Include="Step4Probe" />
+        <!--
+          The generation-settings snapshot is internal (it is an implementation
+          detail of the generator), but the PUBLIC RelicGenerator.Generate path
+          reads it, so the probe needs visibility to JIT that path. Without this
+          the probe dies with TypeLoadException on GenerationSettings the moment
+          Generate runs - which is how the omission was found (2026-09-19).
+        -->
+        <InternalsVisibleTo Include="RelicProbe" />
     </ItemGroup>
 
     <ItemGroup>

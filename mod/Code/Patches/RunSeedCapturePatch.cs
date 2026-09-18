@@ -41,9 +41,16 @@ internal static class RunSeedEarlyCapture
             string? seed = state?.Rng?.StringSeed;
             if (!string.IsNullOrEmpty(seed))
             {
+                // Freeze the generation settings BEFORE the first definition
+                // lookup of the run (user order 2026-09-18): the extra-pool
+                // toggle and the pool weights are generation inputs, so a
+                // mid-run settings edit must not re-roll relics the player
+                // already holds. Unfrozen by ResetForRunEnd.
+                Generation.GenerationSettings.Freeze();
                 AnthonyRelicRunRegistry.CurrentRunSeed = seed;
                 AnthonyRelicLocUpdater.OnSeedCaptured(seed);
-                MainFile.Logger.Info($"[{MainFile.ModId}] run seed early-captured: {seed}");
+                MainFile.Logger.Info($"[{MainFile.ModId}] run seed early-captured: {seed}; " +
+                                     $"generation settings frozen: {Generation.GenerationSettings.Current.Key}");
             }
         }
         catch (Exception e)

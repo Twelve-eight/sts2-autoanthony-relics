@@ -111,6 +111,16 @@ public static class RelicText
             ("extra_turn", _, "self") => "take an extra turn if you play no cards",
             ("expand_card_pool", _, "self") => "card rewards may contain cards from any character",
             ("enchant_reward", _, "self") => "card rewards are enchanted with Glam",
+            // Extra pool (user order 2026-09-18), ported from QuriousCraftingRelics.
+            ("retain_hand_card", _, "self") => $"give up to {amount} card{(amount == 1 ? "" : "s")} in your hand Retain",
+            ("sly_hand_card", _, "self") => $"give up to {amount} card{(amount == 1 ? "" : "s")} in your hand Sly",
+            ("ethereal_hand_card", _, "self") => $"give up to {amount} card{(amount == 1 ? "" : "s")} in your hand Ethereal",
+            ("enchant_hand", "sharp", "self") => $"enchant up to {amount} Attack card{(amount == 1 ? "" : "s")} in your hand with Sharp",
+            ("enchant_hand", "nimble", "self") => $"enchant up to {amount} Block-granting card{(amount == 1 ? "" : "s")} in your hand with Nimble",
+            ("enchant_hand", "imbued", "self") => $"enchant up to {amount} Skill card{(amount == 1 ? "" : "s")} in your hand with Imbued",
+            ("enchant_deck", "sharp", "self") => $"enchant a random Attack card in your deck with {amount} Sharp",
+            ("enchant_deck", "nimble", "self") => $"enchant a random Block-granting card in your deck with {amount} Nimble",
+            ("enchant_deck", "imbued", "self") => $"enchant a random Skill card in your deck with {amount} Imbued",
             _ => throw new InvalidOperationException($"no EN text for effect {effect.Opcode}/{effect.Variant}/{effect.Target}"),
         };
     }
@@ -151,7 +161,23 @@ public static class RelicText
             ("retain_hand", _, "self") => "回合结束时不再弃掉你的手牌",
             ("extra_turn", _, "self") => "若你本回合未打出卡牌,则获得一个额外回合",
             ("expand_card_pool", _, "self") => "卡牌奖励可能包含任意角色的卡牌",
-            ("enchant_reward", _, "self") => "卡牌奖励会被附上Glam",
+            ("enchant_reward", _, "self") => "卡牌奖励会被附上华彩",
+            // Extra pool (user order 2026-09-18). Keyword and enchantment names
+            // copied from the base game's own zhs localization dump
+            // (SlayTheSpire2.pck -> "RETAIN.title" 保留, "SLY.title" 奇巧,
+            // "ETHEREAL.title" 虚无, "SHARP.title" 锋利, "NIMBLE.title" 灵巧,
+            // "IMBUED.title" 注能), not from memory - see the terminology
+            // glossary's L28 rule. Note 奇巧 is the base game's Sly, which
+            // differs from a literal reading.
+            ("retain_hand_card", _, "self") => $"使手牌中最多{amount}张牌获得保留",
+            ("sly_hand_card", _, "self") => $"使手牌中最多{amount}张牌获得奇巧",
+            ("ethereal_hand_card", _, "self") => $"使手牌中最多{amount}张牌获得虚无",
+            ("enchant_hand", "sharp", "self") => $"使手牌中最多{amount}张攻击牌获得锋利附魔",
+            ("enchant_hand", "nimble", "self") => $"使手牌中最多{amount}张可获得格挡的牌获得灵巧附魔",
+            ("enchant_hand", "imbued", "self") => $"使手牌中最多{amount}张技能牌获得注能附魔",
+            ("enchant_deck", "sharp", "self") => $"使牌堆中1张随机攻击牌获得{amount}层锋利附魔",
+            ("enchant_deck", "nimble", "self") => $"使牌堆中1张随机可获得格挡的牌获得{amount}层灵巧附魔",
+            ("enchant_deck", "imbued", "self") => $"使牌堆中1张随机技能牌获得{amount}层注能附魔",
             _ => throw new InvalidOperationException($"no ZHS text for effect {effect.Opcode}/{effect.Variant}/{effect.Target}"),
         };
     }
@@ -225,6 +251,24 @@ public static class RelicText
         new("Strawberry", "Strawberry", "草莓"),
         new("Vajra", "Vajra", "金刚杵"),
         new("VelvetChoker", "Choker", "颈圈"),
+        // Extra pool (user order 2026-09-18), ported from QuriousCraftingRelics.
+        // These sources are card-level affixes with no source RELIC, so unlike
+        // the entries above the word is the base game's own official name for
+        // the keyword/enchantment it applies (SlayTheSpire2.pck loc dump:
+        // RETAIN 保留, SLY 奇巧, ETHEREAL 虚无, SHARP 锋利, NIMBLE 灵巧,
+        // IMBUED 注能) rather than a substring of a relic title. That keeps the
+        // table's invariant - every morpheme is a real word the player already
+        // sees in this game, in both languages - which is what Morpheme()
+        // failing loud is protecting.
+        new("QuriousHandRetain", "Retain", "保留"),
+        new("QuriousHandSly", "Sly", "奇巧"),
+        new("QuriousHandEthereal", "Ethereal", "虚无"),
+        new("QuriousEnchantSharp", "Sharp", "锋利"),
+        new("QuriousEnchantNimble", "Nimble", "灵巧"),
+        new("QuriousEnchantImbued", "Imbued", "注能"),
+        new("QuriousPickupSharp", "Whetstone", "磨石"),
+        new("QuriousPickupNimble", "Footwork", "步法"),
+        new("QuriousPickupImbued", "Sigil", "刻印"),
     };
 
     private static readonly Dictionary<string, NameMorpheme> MorphemeBySource = BuildMorphemeIndex();

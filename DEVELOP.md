@@ -270,3 +270,179 @@ v6 让名字成为片段的纯函数, 这**放大**了本缺陷: 修复前"同�
 
 一个 run 内**描述**可以重复(60 个槽位 vs 44 个效果片段, 空间必然复用). 名字不同, 描述相同.
 实测修复前 60 种子中 56 个有此现象, 属既有设计取舍, 未改动.
+
+## 额外词条池 + 每池生成权重 (2026-09-18 用户指令)
+
+### 用户指令
+
+"扩遗物账本, 从怪异炼化遗物那里搬一点过来, 当作额外池, 做它的开关. 设置页面可调每种词条池的生成权重."
+
+三个交付物:
+1. **扩账本** -- 新增效果片段(来源: 姊妹 mod QuriousCraftingRelics 的 extra 池)
+2. **额外池 + 开关** -- 默认关; 开启后才参与生成
+3. **每池生成权重** -- 设置页可调, 每种池一个滑块
+
+### 为什么必须动"配置不参与生成"的契约 (这是本次设计的核心)
+
+现有契约(见 `AutoAnthonyRelicsConfig` 注释):**配置一律不参与生成**, 定义是
+`(mod id, version, run seed, slot)` 的纯函数, 两端 MP 各自重生成即一致.
+
+但用户要的"权重"**本身就是生成输入**. 强行让它不进缓存键会产生一个真缺陷:
+改权重后 `DefinitionsFor` 命中旧缓存, 玩家改了设置却看不到任何变化.
+
+**解法: 把生成相关配置纳入定义缓存键, 并在开局冻结.**
+(实现后修正: 开关**不**改池内容.)
+
+- **实现取"池恒定 + 谓词门控"**: `RelicFragmentPool.Build(.., includeExtraPool: true)`
+  在 `MainFile` 里**永远**把额外原子建进池, 开关只作用于生成期的
+  `RelicGenerator.Excluded` 规则 6(`effect.Pool == Extra && !IncludeExtraPool`).
+  理由: 让开关改池内容需要**在局中重建池**, 而重建正是定义缓存键要避免的事;
+  谓词门控让 fingerprint 保持稳定, 开关改走缓存键的 settings 分量.
+- **权重**不改池内容, 只改抽样分布, 必须**显式**进键. 做法:
+  `GenerationSettings.Key` 把 5 个值(1 bool + 4 权重, 各 10 bit)**完美打包**进一个
+  `long`(非哈希 -- 哈希会存在两组设置撞键, 进而互相取到对方遗物的风险),
+  作为第 4 个分量加进 `AnthonyRelicRunRegistry` 的键元组.
+- **开局冻结**: 权重必须在 seed 捕获时快照, 与 Qurious 的
+  `QuriousGenerationSnapshot` 同一模式. 否则**局中改权重会让已持有的遗物改变含义**
+  (定义被重算, 同一槽位的遗物换掉) -- 这是 Qurious 已用实测复现过的缺陷类.
+  AAR 侧对应点: `AnthonyRelicRunRegistry.ResetForRunEnd` / `CurrentRunSeed` 的生命周期.
+
+MP 一致性: 两端配置不同 -> 键不同 -> 定义不同 -> **分歧**. 所以权重与开关都是
+**Tier-1 MP 确定性键**, 必须在设置页注明"联机两端需一致"(与 Qurious 的
+`EnableExtraPool` 注释同一处理).
+
+### 额外池的搬运范围 (已逐个核对引擎 API)
+
+Qurious extra 池 13 项, 按 AAR 执行器能否承接分三类:
+
+**(A) 可直接搬 -- 引擎 API 已核实存在**
+| Qurious 模板 | 引擎调用 | AAR 需要的实现 |
+|---|---|---|
+| `X_HAND_RETAIN` | `CardModel.GiveSingleTurnRetain()` (`CardModel.cs:1348`) | 新 opcode `retain_hand_card` + 回合开始钩子 |
+| `X_HAND_SLY` | `CardModel.GiveSingleTurnSly()` (`:1357`) | 新 opcode `sly_hand_card` |
+| `X_HAND_ETHEREAL` | `CardModel.AddKeyword(CardKeyword.Ethereal)` (`:1330`) | 新 opcode `ethereal_hand_card` (负面) |
+
+`CardKeyword` 枚举确认含 `Retain`/`Sly`/`Ethereal`(`CardKeyword.cs`).
+
+**(B) 需要附魔 API -- 已核实, 但要选牌逻辑**
+`CardCmd.Enchant<T>(card, amount)` (`CardCmd.cs:520`)、`Enchant(enchantment, card, amount)` (`:534`)、
+`ClearEnchantment` (`:567`). 覆盖 `X_ENCHANT_SHARP/NIMBLE/IMBUED` 与
+`X_PICKUP_SHARP/NIMBLE/IMBUED`(拾起时给**牌组**牌附魔, 与战斗开始给**手牌**附魔是两个不同钩子).
+
+**(C) 不可搬 -- 依赖外部 mod**
+`X_STANCE_WRATH/CALM/DIVINITY` 依赖 Watcher mod (`EnterWrath` 在引擎源码中 **0 处匹配**,
+Qurious 也是反射调用并在 mod 缺失时跳过). AAR 不应引入这种可选依赖.
+
+**结论: 搬运 (A) 3 项 + (B) 6 项 = 9 项, 全部落在一个新池 `ExtraEffects`.**
+`X_RETAIN_ENERGY_DISCOUNT` / `X_RETAIN_ATTACK_BUFF` 依赖"保留牌"的跨回合计数状态,
+AAR 现有架构无该状态 -> **本轮不搬**, 与账本 reject 的既有理由一致.
+
+### 权重模型
+
+每池一个整数权重(整数, 因为 `DeterministicRandom` 只有整数 API, 且跨平台一致):
+
+| 配置键 | 默认 | 含义 |
+|---|---|---|
+| `WeightTriggeredCore` | 100 | 核心池触发类片段 |
+| `WeightPassiveCore` | 100 | 核心池被动类(含 restriction) |
+| `WeightBenefitCore` | 100 | 核心池纯增益被动 |
+| `WeightExtra` | 100 | 额外池(开关打开时) |
+
+接入点唯一: `RelicGenerator.WeightOf(EffectFragment)`(`:852`)目前返回常量 `NormalWeight`,
+`PickWeightedUniquely`(`:804`)已完整支持 `Func<T,int> weightOf`, 包括
+`totalWeight > 0` 分支与 `roll < accumulated` 累加. **只需让 `WeightOf` 按片段的池归属查表.**
+
+关键约束(**实现后修正**): `PickWeightedUniquely` 每次**抽取**无论权重如何都恰好消耗
+一次 `random.Next(..)`, 所以权重不改单次抽取的成本. 但它**会**改变总抽取次数 --
+被选中的片段会左右控制流(抽到 restriction 会带出配对的 offset 抽取; benefit 走另一条带).
+最初本文档写的是"权重不得改变 RNG 消耗形状", 探针一测即证伪(2026-09-19, 同一 seed 下
+per-seed 效果数 `74,78,76,79,73` vs `74,77,76,79,74`), 该断言已删除.
+真正必须成立的是: **同一 (seed, settings) 组合逐字节可复现** -- 这正是缓存键里
+settings 分量所保证的.
+
+被动带另有一条**不查权重**的路径: `PickEligiblePassive`(`:783`)是均匀抽(`random.Next(count)`).
+所以 `WeightPassiveCore` 对"被动带回退"无效 -- 设计上**接受**这一点并写入文档
+(设置页 hover 文案照此写明), 避免让用户以为调了滑块就能控制回退分布.
+
+实测被动带**达不到标称 15%**(f1c34cc 上 10.97%, 本次 11.23%), 原因经池构成核实:
+8 个被动词条里 6 个是 restriction, 只剩 **2 个**普通被动; 一局约 9 个被动带槽位,
+消耗完这 2 个后槽位落到触发路径, 而 restriction 分支只有 30% 触发. 所以被动带
+**上界**是标称值, **有效值**结构性地低于标称值 -- 属内容量限制, 不是缺陷.
+探针里原先"15% +- 3"的断言是错的(在 HEAD 上就已失败, 与本次改动无关), 已改为
+"不超过标称 15%" + "仍被填充(>= 8%)".
+
+### 池归属的判定
+
+片段属于哪个池, 由**账本来源**决定(而非 opcode 猜测): 额外池的原子写在账本新增的
+`extraSupported` 段, `RelicFragmentPool.Build` 据此打标 `EffectFragment.Pool`。
+这样"扩账本"就是纯数据工作, 判定不散落在代码里。
+
+### 执行器时机 (实现中查证并修正了原设计)
+
+搬运的 9 项里, 手牌类效果的**执行时机**是唯一真正棘手处, 且本文档初稿判断错了:
+
+- `combat_start` = `Hook.BeforeCombatStart`(`CombatManager.cs:594`), 在 `StartTurn`(`:610`)
+  之前 -> **抽牌尚未发生, 手牌为空**. 在此执行手牌效果会遍历 0 张牌而静默失效.
+  Qurious 正是撞上这点才把手牌附魔挪到 `AfterPlayerTurnStartLate`
+  (`ChaosRelicModel.cs:519` 原话: the hand is empty and every enchant loop iterated
+  zero cards).
+- `turn_start` = `Hook.AfterSideTurnStart`(`:783`), 而抽牌在 `SetupPlayerTurn`(`:924`)里,
+  且 `:778` 已 `await` 该任务 -> **`AfterSideTurnStart` 时手牌已经存在**.
+  初稿误以为 `:783` 早于 `:924` 就把两者都推迟了, 属于对异步顺序的误读.
+- 修正后的实现: `turn_start` 的手牌效果**内联**执行(`ExecuteEffectsAsync` 默认
+  `handAvailable: true`); 只有 `combat_start` 传 `handAvailable: false`, 由
+  `AfterPlayerTurnStartLate` 的延迟通道补执行, 并以 `turn <= 1` 保持"每场战斗一次"语义.
+- `enchant_deck` 目标是**主牌组**(`PileType.Deck => player.Deck`, 非战斗牌堆),
+  局外也存在, 故在 `obtained` 内联执行, 无需延迟.
+
+生成侧对应加了规则 7(`RelicGenerator.Excluded`): 手牌类效果只允许配
+`turn_start` / `combat_start`(`EffectFragment.HandEffectTriggers`), 牌组类只允许配
+`obtained`(`DeckEffectTriggers`). 否则会生成"文案承诺了某个效果, 但没有任何钩子会跑"的遗物.
+
+另一处实现细节: 延迟通道加了**重复调用守卫**(按 combat state + turn 记忆).
+引擎每回合每模型只广播一次该钩子, 但本环境装了 RitsuLib 这类**会重发钩子**的框架,
+无守卫时开局手牌会被附魔多次. Qurious 对同一钩子有同样的守卫(`ChaosRelicModel.cs:510`).
+
+### 跨 mod 配置键碰撞 (真实事故, 2026-09-19)
+
+**现象**: 启动日志出现 `[QuriousCraftingRelics] cfg migrated: 7 legacy keys, 6 carried over;
+old file kept as AutoAnthonyRelics.cfg.v0.5.1.bak` -> AAR 自己的配置被 Qurious 的迁移**偷走**,
+AAR 设置全部重置, 且 6 个 AAR 键被灌进 Qurious 的 cfg.
+
+**根因(两个条件同时成立)**:
+1. 两个 mod 的配置文件名**都是** `AutoAnthonyRelics.cfg` -- BaseLib 用**根命名空间**推导文件名,
+   而 Qurious 正是从 `AutoAnthonyRelics` 改名而来(见 Qurious `ConfigMigration.cs` 头部注释).
+2. 本次给 AAR 新增的属性叫 `EnableExtraPool`, 而它**恰好**是 Qurious
+   `KnownLegacyScalarKeys` 里的一个旧键名. Qurious 的归属判据当时是
+   **"任一键匹配即认领"** -> 一个同名键就让它认领了别人的整个文件.
+
+**修复(两侧都改)**:
+- AAR 侧: 属性改名 `EnableExtraPool` -> `EnableExtraEffectPool`, 并在
+  `AutoAnthonyRelicsConfig` 里写明"此名字是承重的, 不得改回; 也不得使用 Qurious 的
+  旧键名或 `Cost_/Refund_/Min_/Max_` 前缀".
+- Qurious 侧: 归属判据从"任一键匹配"收紧为**"每个键都必须属于 Qurious"**
+  (all-or-nothing). 真正的旧版 Qurious 配置不含任何外来键, 所以不损失任何合法迁移,
+  而任何带外来键的文件都会留给它的主人. 该侧有独立探针
+  (`tools/migration-probe`)覆盖"外来文件不被认领".
+
+**用户数据恢复**: AAR 配置已从 `.v0.5.1.bak` 还原为 `AutoAnthonyRelics.cfg`
+(并把旧键名迁移为 `EnableExtraEffectPool`); Qurious cfg 里被注入的 6 个 AAR 键已移除.
+两侧实机确认: 启动日志不再出现 `cfg migrated`, 且两个 mod 各自读到自己的设置.
+
+### 验证
+
+- `tools/relic-probe`(离线, 绑定 mod 构建产物): 池计数(165 原子 / 47+9 supported),
+  额外池开关的**双向**可达性(关闭时 9 个额外片段从不被抽到; 开启时 200 seed 内全部可达),
+  权重确实改变抽中组合, 同一 (seed, settings) 可复现, 时机规则无违规配对.
+  并对**故意破坏**做过判别力验证: 把 `WeightOf` 退回常量 -> 2 项失败;
+  把开关谓词短路 -> 1 项失败; 把规则 7 手牌子句短路 -> 1 项失败.
+- `tools/relic-eligibility-probe`(独立 oracle, 直接编译 mod 的纯源码层):
+  `Excluded` 的规则 6/7 与 oracle 表逐对比较. 为让它继续可用,
+  `GenerationSettings` 刻意**不引用 BaseLib**(配置读取经 `ConfigSource` 委托注入),
+  否则该工程只引用 `sts2.dll` 会编译失败.
+  同样做了判别力验证: 短路规则 7 -> 该断言失败(且非空泛性守卫证明它非空转).
+- 实机: 启动日志 `relics-v8`, 165 原子, `+9 extra`, 配置项齐全, AAR 零异常;
+  把 `EnableExtraEffectPool` 置 True 后日志变为 `extraPool=True`, 证明
+  配置 -> BaseLib -> `ConfigSource` -> `GenerationSettings` 全链路打通.
+- **未覆盖**: 手牌效果在真实战斗中的实际生效(需要玩家开局并打开额外池;
+  后台输入对 Godot 无效), 以及 MP 两端一致性.

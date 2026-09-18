@@ -6,10 +6,12 @@ namespace AutoAnthonyRelics;
 
 /// <summary>
 /// Per-run cache of generated relic definitions. Definitions are a pure
-/// function of the run seed, the generator ALGORITHM VERSION and the fragment
-/// pool (ledger/catalog data) - the cache key carries all three (astra AAR-4:
-/// a pool/ledger change or an algorithm change with the same seed must never
-/// serve a stale cached pool), so save-loads / reconnects regenerate the
+/// function of the run seed, the generator ALGORITHM VERSION, the fragment
+/// pool (ledger/catalog data) and the GENERATION SETTINGS - the cache key
+/// carries all four (astra AAR-4: a pool/ledger change or an algorithm change
+/// with the same seed must never serve a stale cached pool; user order
+/// 2026-09-18 added the settings, since the extra-pool toggle and the pool
+/// weights are generation inputs), so save-loads / reconnects regenerate the
 /// identical relics from the engine-restored seed. Bounded to a few seeds
 /// (map previews and menus can query relics without a run).
 /// </summary>
@@ -21,12 +23,13 @@ public static class AnthonyRelicRunRegistry
     // 96 B for an 8-char seed, 128 B for a 24-char seed, measured at 128.3 ns - while the
     // dictionary lookup alone costs 0 B / 38.5 ns and a frozen-context comparison costs
     // 0 B / 6.2 ns. A 60-slot sweep paid 5760 B purely to build keys. The cache is now keyed
-    // by an ordinal tuple over the same three components (seed, generator version, pool
-    // fingerprint), so warm hits allocate nothing. Coverage of all three components is
-    // pinned by tools/relic-probe (the key was under-covered twice: round 2 added the pool
-    // fingerprint, AAR-4 added SeedVersion).
-    private static readonly Dictionary<(string Seed, string Version, string Fingerprint), IReadOnlyList<GeneratedRelicDefinition>> Cache = new();
-    private static readonly Queue<(string Seed, string Version, string Fingerprint)> Order = new();
+    // by an ordinal tuple over the same components (seed, generator version, pool
+    // fingerprint, generation settings), so warm hits allocate nothing. Coverage of every
+    // component is pinned by tools/relic-probe (the key was under-covered twice: round 2
+    // added the pool fingerprint, AAR-4 added SeedVersion; 2026-09-18 added the settings
+    // key, which is a packed `long` - a value type, so it costs no allocation).
+    private static readonly Dictionary<(string Seed, string Version, string Fingerprint, long Settings), IReadOnlyList<GeneratedRelicDefinition>> Cache = new();
+    private static readonly Queue<(string Seed, string Version, string Fingerprint, long Settings)> Order = new();
 
     // Frozen active context (AAR-1): the overwhelmingly common access pattern is many lookups
     // in a row for the SAME (seed, version, fingerprint) - a render pass resolves every relic
@@ -42,6 +45,7 @@ public static class AnthonyRelicRunRegistry
         string Seed,
         string Version,
         string Fingerprint,
+        long Settings,
         IReadOnlyList<GeneratedRelicDefinition> Result);
 
     private static volatile FrozenContext? _frozen;
@@ -57,40 +61,45 @@ public static class AnthonyRelicRunRegistry
         if (frozen != null
             && frozen.Seed == runSeed
             && frozen.Version == RelicGenerator.SeedVersion
-            && frozen.Fingerprint == pool.Fingerprint)
+            && frozen.Fingerprint == pool.Fingerprint
+            && frozen.Settings == GenerationSettings.Current.Key)
         {
             return frozen.Result;
         }
 
         lock (Gate)
         {
-            // Key = seed + ALGORITHM VERSION + fragment-pool fingerprint (second-round review
-            // 2026-09-13 added the fingerprint; third round AAR-4 added SeedVersion):
-            // definitions depend on the pool, the ledger and the generator, so a data, ledger
-            // or algorithm change with the same seed must not serve a stale cached pool.
-            (string Seed, string Version, string Fingerprint) key = (runSeed, RelicGenerator.SeedVersion, pool.Fingerprint);
+            // Key = seed + ALGORITHM VERSION + fragment-pool fingerprint + GENERATION
+            // SETTINGS (second-round review 2026-09-13 added the fingerprint; third round
+            // AAR-4 added SeedVersion; 2026-09-18 added the settings): definitions depend on
+            // the pool, the ledger, the generator and the settings, so a change to any of
+            // them with the same seed must not serve a stale cached pool. Read the settings
+            // ONCE so the key and the generation cannot disagree.
+            long settings = GenerationSettings.Current.Key;
+            (string Seed, string Version, string Fingerprint, long Settings) key =
+                (runSeed, RelicGenerator.SeedVersion, pool.Fingerprint, settings);
             if (Cache.TryGetValue(key, out IReadOnlyList<GeneratedRelicDefinition>? cached))
             {
-                _frozen = new FrozenContext(key.Seed, key.Version, key.Fingerprint, cached);
+                _frozen = new FrozenContext(key.Seed, key.Version, key.Fingerprint, key.Settings, cached);
                 return cached;
             }
             IReadOnlyList<GeneratedRelicDefinition> generated = RelicGenerator.Generate(runSeed, pool);
             while (Order.Count >= CacheLimit)
             {
-                (string Seed, string Version, string Fingerprint) evicted = Order.Dequeue();
+                (string Seed, string Version, string Fingerprint, long Settings) evicted = Order.Dequeue();
                 Cache.Remove(evicted);
                 // Keep the frozen context consistent with the cache: if the evicted entry is the
                 // frozen one, clear it so the fast path cannot serve an un-cached result.
                 FrozenContext? current = _frozen;
                 if (current != null && current.Seed == evicted.Seed && current.Version == evicted.Version
-                    && current.Fingerprint == evicted.Fingerprint)
+                    && current.Fingerprint == evicted.Fingerprint && current.Settings == evicted.Settings)
                 {
                     _frozen = null;
                 }
             }
             Order.Enqueue(key);
             Cache[key] = generated;
-            _frozen = new FrozenContext(key.Seed, key.Version, key.Fingerprint, generated);
+            _frozen = new FrozenContext(key.Seed, key.Version, key.Fingerprint, key.Settings, generated);
             return generated;
         }
     }
@@ -99,12 +108,18 @@ public static class AnthonyRelicRunRegistry
     /// Run-end reset (astra AAR-7): called from the RunManager.CleanUp
     /// postfix. Drops the active seed - menu/canonical queries must not
     /// resolve the previous run - and clears the cache (definitions are a
-    /// pure function of (seed, version, fingerprint), so clearing costs a
-    /// regeneration at most and cannot change outcomes).
+    /// pure function of (seed, version, fingerprint, settings), so clearing
+    /// costs a regeneration at most and cannot change outcomes).
+    ///
+    /// Also UNFREEZES the generation settings (user order 2026-09-18): the
+    /// snapshot taken at seed capture belongs to the run that just ended, so
+    /// leaving it in place would make the next run silently ignore the player's
+    /// settings edits.
     /// </summary>
     public static void ResetForRunEnd()
     {
         CurrentRunSeed = null;
+        GenerationSettings.Unfreeze();
         lock (Gate)
         {
             Cache.Clear();

@@ -23,6 +23,11 @@
     <Compile Include="../../mod/Code/Data/AnthonyCatalog.cs" />
     <Compile Include="../../mod/Code/Data/RelicAtomData.cs" />
     <Compile Include="../../mod/Code/Generation/GenerationTypes.cs" />
+    <!-- GenerationSettings is part of the same pure layer: it deliberately has
+         NO BaseLib reference (the config read is injected via ConfigSource), so
+         it compiles here too. Without it RelicGenerator's rule 6/7 calls do not
+         resolve and this oracle stops building (2026-09-19). -->
+    <Compile Include="../../mod/Code/Generation/GenerationSettings.cs" />
     <Compile Include="../../mod/Code/Generation/RelicFragments.cs" />
     <Compile Include="../../mod/Code/Generation/RelicText.cs" />
     <Compile Include="../../mod/Code/Generation/RelicGenerator.cs" />

@@ -190,7 +190,10 @@ public abstract class AnthonyRelicModel : CustomRelicModel
                 return;
             }
             Flash();
-            await ExecuteEffectsAsync(effects, owner);
+            // handAvailable: false - BeforeCombatStart (:594) precedes StartTurn
+            // (:610) and therefore the first draw (:924). Hand effects are applied
+            // by the deferred post-draw pass instead.
+            await ExecuteEffectsAsync(effects, owner, handAvailable: false);
         }
         catch (Exception e)
         {
@@ -442,6 +445,12 @@ public abstract class AnthonyRelicModel : CustomRelicModel
         // for the rest of the run.
         _extraTurnUsedThisCombat = false;
         _wasOwnerPartOfLastPlayerTurn = true;
+        // Deferred-hand-effect latch (extra pool): cleared so the next combat's
+        // opening hand is enchanted again. The combat state reference alone would
+        // usually differ, but clearing explicitly makes the reset independent of
+        // whether the engine reuses the state object.
+        _deferredHandAppliedState = null;
+        _deferredHandAppliedTurn = -1;
         lock (DebuffGate)
         {
             PendingEnemyDebuffs.Clear();
@@ -1002,11 +1011,26 @@ public abstract class AnthonyRelicModel : CustomRelicModel
     private static readonly MethodInfo? s_addCurse =
         typeof(CardPileCmd).GetMethod("AddCurseToDeck", new[] { typeof(Player) });
 
-    private async Task ExecuteEffectsAsync(IReadOnlyList<EffectFragment> effects, Player owner)
+    /// <param name="handAvailable">
+    /// False only for the hooks that fire BEFORE the turn's draw, i.e.
+    /// BeforeCombatStart (`combat_start`). The hand does not exist there, so a
+    /// hand effect run inline would iterate zero cards and silently do nothing;
+    /// those are applied by the deferred post-draw pass instead
+    /// (AfterPlayerTurnStartLate). Every other hook fires after the draw and
+    /// passes the default true - notably `turn_start` (AfterSideTurnStart),
+    /// which runs only after :778 has awaited the SetupPlayerTurn task whose
+    /// :924 draws.
+    /// </param>
+    private async Task ExecuteEffectsAsync(IReadOnlyList<EffectFragment> effects, Player owner,
+        bool handAvailable = true)
     {
         var context = new ThrowingPlayerChoiceContext();
         foreach (EffectFragment effect in effects)
         {
+            if (!handAvailable && effect.IsHandEffect)
+            {
+                continue;
+            }
             try
             {
                 await ExecuteEffectAsync(effect, owner, context);
@@ -1114,12 +1138,269 @@ public abstract class AnthonyRelicModel : CustomRelicModel
                 case ("add_curse", _, _):
                     await AddCurseAsync(effect, owner);
                     break;
+                // ---- Extra pool (user order 2026-09-18), ported from
+                // QuriousCraftingRelics' extra catalog. TIMING is the load-bearing
+                // part here, not the commands (verified in CombatManager):
+                //
+                // * `turn_start` (AfterSideTurnStart, :783) HAS a hand: :778
+                //   awaits the SetupPlayerTurn task whose :924 draws, and :783
+                //   runs only after that. These run inline.
+                // * `combat_start` (BeforeCombatStart, :594) runs before StartTurn
+                //   (:610) and therefore before any draw - a hand effect there
+                //   would iterate an empty hand, so BeforeCombatStart passes
+                //   handAvailable:false and the deferred pass applies them
+                //   (RunHandEffects). Qurious hit the same wall
+                //   (ChaosRelicModel.cs:519).
+                // * `enchant_deck` targets the MASTER DECK, which exists outside
+                //   combat, so it runs inline at its `obtained` trigger.
+                case ("retain_hand_card", _, "self"):
+                case ("sly_hand_card", _, "self"):
+                case ("ethereal_hand_card", _, "self"):
+                case ("enchant_hand", _, "self"):
+                    RunHandEffects(new[] { effect }, owner);
+                    break;
+                case ("enchant_deck", _, "self"):
+                    EnchantDeck(effect, owner);
+                    break;
                 default:
                     throw new InvalidOperationException(
                         $"unsupported relic effect {effect.Opcode}/{effect.Variant}/{effect.Target} on atom(s) {string.Join(",", effect.SourceAtoms)}");
             }
         }
     }
+
+    /// <summary>
+    /// Deferred hand-effect pass (extra pool, user order 2026-09-18) for the
+    /// `combat_start` trigger only.
+    ///
+    /// `combat_start` is BeforeCombatStart (CombatManager:594), which runs before
+    /// StartTurn (:610) and therefore before the first draw (:924) - so a hand
+    /// effect applied there iterates an EMPTY hand and silently does nothing.
+    /// This pass re-applies those effects after the draw. QuriousCraftingRelics
+    /// hit the same wall and moved its combat-start enchants here too
+    /// (ChaosRelicModel.cs:519 "the hand is empty and every enchant loop
+    /// iterated zero cards").
+    ///
+    /// Why not simply retarget the atom to `turn_start` instead: the trigger
+    /// carries the relic's TEXT and its lifetime. `combat_start` reads as a
+    /// once-per-combat opening effect, `turn_start` as every turn. Deferring
+    /// keeps the source's meaning and is the smaller lie than re-labelling a
+    /// once-per-combat affix as a per-turn one.
+    ///
+    /// Turn gate: `turn &lt;= 1` is what "combat start" means for a hand effect -
+    /// one opening-hand enchant, not one per turn - and is exactly Qurious's
+    /// gate for the same reason (ChaosRelicModel.cs:522).
+    /// </summary>
+    public override Task AfterPlayerTurnStartLate(PlayerChoiceContext choiceContext, Player player)
+    {
+        // Fuse (L21): awaited by the engine's turn loop.
+        try
+        {
+            var (owner, trigger, effects) = Resolve("combat_start");
+            if (owner is null || effects is null || owner != player)
+            {
+                return Task.CompletedTask;
+            }
+            if (player.PlayerCombatState?.TurnNumber > 1)
+            {
+                return Task.CompletedTask;
+            }
+            // Duplicate-invocation guard. The engine broadcasts this hook once
+            // per model per turn, but hook-refiring frameworks (RitsuLib is
+            // installed alongside this mod) re-invoke it; without the guard the
+            // opening hand would be enchanted once per refire. Qurious guards
+            // the same hook the same way (ChaosRelicModel.cs:510, keyed on the
+            // combat state + turn number). Keyed per relic instance, so it also
+            // survives a mid-combat combat-state replacement.
+            var combatState = player.PlayerCombatState;
+            if (ReferenceEquals(_deferredHandAppliedState, combatState) && _deferredHandAppliedTurn == 1)
+            {
+                return Task.CompletedTask;
+            }
+            if (!MatchesCondition(trigger!.Condition, owner))
+            {
+                return Task.CompletedTask;
+            }
+            _deferredHandAppliedState = combatState;
+            _deferredHandAppliedTurn = 1;
+            RunHandEffects(effects, owner);
+        }
+        catch (Exception e)
+        {
+            MainFile.Logger.Error($"[{MainFile.ModId}] deferred hand effect suppressed to keep the combat alive: {e}");
+        }
+        return Task.CompletedTask;
+    }
+
+    // Deferred-pass bookkeeping (see AfterPlayerTurnStartLate). Reset with the
+    // other per-combat flags in AfterCombatEnd, so a new combat applies again.
+    private PlayerCombatState? _deferredHandAppliedState;
+    private int _deferredHandAppliedTurn = -1;
+
+    /// <summary>
+    /// Apply this relic's hand-targeted effects (extra pool). One shared
+    /// selection helper serves all four opcodes rather than four near-identical
+    /// loops: the difference between them is only what is done to the chosen
+    /// cards.
+    ///
+    /// Selection is RANDOM over the eligible hand, not player-chosen: AAR has no
+    /// interactive selection path (the executor runs under
+    /// ThrowingPlayerChoiceContext, which throws on any player choice), unlike
+    /// Qurious which has a full CardSelectCmd flow. Random-over-eligible is the
+    /// honest behaviour for a passive relic affix and matches the mod's
+    /// non-interactive trigger model.
+    /// </summary>
+    private void RunHandEffects(IReadOnlyList<EffectFragment> effects, Player owner)
+    {
+        foreach (EffectFragment effect in effects.Where(e => e.IsHandEffect))
+        {
+            int amount = effect.Amount;
+            if (amount <= 0)
+            {
+                continue;
+            }
+            var hand = PileType.Hand.GetPile(owner).Cards.ToList();
+            if (hand.Count == 0)
+            {
+                continue;
+            }
+            Flash();
+            switch (effect.Opcode)
+            {
+                case "retain_hand_card":
+                    foreach (CardModel card in PickHand(owner, hand, amount, static _ => true))
+                    {
+                        card.GiveSingleTurnRetain();
+                    }
+                    break;
+                case "sly_hand_card":
+                    foreach (CardModel card in PickHand(owner, hand, amount, static _ => true))
+                    {
+                        card.GiveSingleTurnSly();
+                    }
+                    break;
+                case "ethereal_hand_card":
+                    // Exclude already-Ethereal cards: the keyword is permanent on
+                    // the instance, so re-adding it burns one of the `amount`
+                    // picks for nothing.
+                    foreach (CardModel card in PickHand(owner, hand, amount,
+                        static c => !c.Keywords.Contains(CardKeyword.Ethereal)))
+                    {
+                        card.AddKeyword(CardKeyword.Ethereal);
+                    }
+                    break;
+                case "enchant_hand":
+                    foreach (CardModel card in PickHand(owner, hand, amount,
+                        c => CanEnchant(c, effect.Variant)))
+                    {
+                        EnchantCard(card, effect.Variant!);
+                    }
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Apply a deck-wide enchant at obtain time (extra pool). The master deck
+    /// exists outside combat, so unlike the hand effects this runs inline.
+    /// Mirrors QuriousCraftingRelics' X_PICKUP_* behaviour: ONE random eligible
+    /// deck card.
+    /// </summary>
+    private void EnchantDeck(EffectFragment effect, Player owner)
+    {
+        if (effect.Variant is null)
+        {
+            throw new InvalidOperationException(
+                $"enchant_deck without a variant on atom(s) {string.Join(",", effect.SourceAtoms)}");
+        }
+        var deck = PileType.Deck.GetPile(owner).Cards;
+        if (deck.Count == 0)
+        {
+            return;
+        }
+        var eligible = deck.Where(c => CanEnchant(c, effect.Variant)).ToList();
+        if (eligible.Count == 0)
+        {
+            MainFile.Logger.Info($"[{MainFile.ModId}] enchant_deck {effect.Variant}: no eligible deck card");
+            return;
+        }
+        Flash();
+        CardModel? card = owner.RunState.Rng.UpFront.NextItem(eligible);
+        if (card is not null)
+        {
+            EnchantCard(card, effect.Variant);
+        }
+    }
+
+    /// <summary>
+    /// Choose up to <paramref name="count"/> eligible cards from the hand.
+    /// Uses the run-level UpFront RNG channel (the same one Qurious uses for its
+    /// pickup enchants): a run-scoped, seed-deterministic stream, so this does
+    /// not perturb the combat channels (CombatTargets / CombatCardSelection)
+    /// that the engine's own draws depend on.
+    /// </summary>
+    private static List<CardModel> PickHand(Player owner, List<CardModel> hand, int count,
+        Func<CardModel, bool> eligible)
+    {
+        var pool = hand.Where(eligible).ToList();
+        var picked = new List<CardModel>(Math.Min(count, pool.Count));
+        var rng = owner.RunState.Rng.UpFront;
+        while (picked.Count < count && pool.Count > 0)
+        {
+            CardModel? card = rng.NextItem(pool);
+            if (card is null)
+            {
+                break;
+            }
+            pool.Remove(card);
+            picked.Add(card);
+        }
+        return picked;
+    }
+
+    /// <summary>
+    /// Enchant eligibility. The engine's own CanEnchant is what enforces the
+    /// card-type restriction (Sharp = Attack, Nimble = GainsBlock, Imbued =
+    /// Skill) and the one-enchantment-slot rule - and it is REQUIRED, because
+    /// CardCmd.Enchant THROWS InvalidOperationException on an ineligible card
+    /// (CardCmd.cs:537) rather than returning null. Same guard Qurious applies
+    /// (ChaosRelicModel.CanTakeEnchant).
+    /// </summary>
+    private static bool CanEnchant(CardModel card, string? variant) => variant switch
+    {
+        "sharp" => ModelDb.Enchantment<Sharp>().CanEnchant(card),
+        "nimble" => ModelDb.Enchantment<Nimble>().CanEnchant(card),
+        "imbued" => ModelDb.Enchantment<Imbued>().CanEnchant(card),
+        _ => false,
+    };
+
+    /// <summary>
+    /// Enchant a card. The variant is DATA, so the generic
+    /// <c>CardCmd.Enchant&lt;T&gt;</c> cannot be called directly; the closed
+    /// three-case switch is the honest form of that dispatch. It resolves the
+    /// same public overload the generic form does (CardCmd.cs:520 delegates to
+    /// :534) and, like it, takes a MUTABLE copy via <c>ToMutable()</c> - passing
+    /// the canonical instance would fail the command's own AssertMutable.
+    /// An unknown variant throws into the effect fuse, never a silent no-op.
+    /// </summary>
+    private static void EnchantCard(CardModel card, string variant)
+    {
+        switch (variant)
+        {
+            case "sharp":
+                CardCmd.Enchant<Sharp>(card, 1);
+                break;
+            case "nimble":
+                CardCmd.Enchant<Nimble>(card, 1);
+                break;
+            case "imbued":
+                CardCmd.Enchant<Imbued>(card, 1);
+                break;
+            default:
+                throw new InvalidOperationException($"unsupported enchantment variant {variant}");
+        }
+    }
+
 
     private async Task AddCurseAsync(EffectFragment effect, Player owner)
     {

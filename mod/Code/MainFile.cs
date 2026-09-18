@@ -104,21 +104,47 @@ public partial class MainFile : Node
                 Logger.Error($"[{ModId}] bag target self-check failed: {e.Message}");
             }
 
+            // Bind the generation settings' config source. GenerationSettings
+            // lives in the pure source layer (no BaseLib reference - the
+            // eligibility probe compiles it directly), so the settings-page read
+            // is injected here instead of being called from there. Must happen
+            // before the first definition lookup.
+            Generation.GenerationSettings.ConfigSource = static () => new Generation.GenerationSettings(
+                AutoAnthonyRelicsConfig.EnableExtraEffectPool,
+                AutoAnthonyRelicsConfig.WeightTriggeredCore,
+                AutoAnthonyRelicsConfig.WeightPassiveCore,
+                AutoAnthonyRelicsConfig.WeightBenefitCore,
+                AutoAnthonyRelicsConfig.WeightExtra);
+
             // Relic data: atoms (extractor candidates) + ledger (hand-audited
-            // verdicts) -> independent trigger/effect fragment pools.
+            // verdicts) -> independent trigger/effect fragment pools. The extra
+            // pool is built ALWAYS (its atoms are part of the pool identity) and
+            // gated per run by RelicGenerator.Excluded rule 6, so that toggling
+            // it does not require rebuilding - see GenerationSettings.
             Data.RelicAtomPool atoms = Data.RelicAtomData.LoadAtoms();
             Data.RelicLedger ledger = Data.RelicAtomData.LoadLedger();
-            FragmentPool = RelicFragmentPool.Build(atoms, ledger);
+            FragmentPool = RelicFragmentPool.Build(atoms, ledger, includeExtraPool: true);
             Logger.Info($"[{ModId}] relic pool: {atoms.Atoms.Count} extracted atoms, " +
-                        $"{ledger.Supported.Count} ledger-supported, {ledger.Rejected.Count} ledger-rejected; " +
+                        $"{ledger.Supported.Count} ledger-supported (+{ledger.ExtraSupported.Count} extra), " +
+                        $"{ledger.Rejected.Count} ledger-rejected; " +
                         $"fragments: {FragmentPool.Triggers.Count} triggers, " +
                         $"{FragmentPool.TriggeredEffects.Count} triggered effects, " +
                         $"{FragmentPool.PassiveEffects.Count} passives, " +
-                        $"{FragmentPool.BenefitEffects.Count} benefits; " +
+                        $"{FragmentPool.BenefitEffects.Count} benefits " +
+                        $"({FragmentPool.PassiveEffects.Count(e => e.Pool == FragmentPoolKind.Extra)} extra-pool); " +
                         $"restrictions: {FragmentPool.PassiveEffects.Count(e => e.IsRestriction)}");
 
             Logger.Info($"[{ModId}] initialized: enabled={AutoAnthonyRelicsConfig.Enabled}, " +
                         $"replaceVanilla={AutoAnthonyRelicsConfig.ReplaceVanillaRelics}, " +
+                        // The generation settings belong in the log for the same reason as the
+                        // seed version: they are part of the definition cache key, so they decide
+                        // whether an existing save regenerates.
+                        $"extraPool={AutoAnthonyRelicsConfig.EnableExtraEffectPool}, " +
+                        $"weights(triggered/passive/benefit/extra)=" +
+                        $"{AutoAnthonyRelicsConfig.WeightTriggeredCore}/" +
+                        $"{AutoAnthonyRelicsConfig.WeightPassiveCore}/" +
+                        $"{AutoAnthonyRelicsConfig.WeightBenefitCore}/" +
+                        $"{AutoAnthonyRelicsConfig.WeightExtra}, " +
                         // The generator version belongs in the log: it is part of the definition
                         // cache key, so it decides whether an existing save regenerates. Without
                         // it, an in-game log cannot be attributed to a build (2026-09-18: a log
