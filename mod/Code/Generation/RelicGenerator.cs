@@ -167,8 +167,19 @@ public static class RelicGenerator
     /// path consumed them in a different order relative to fragment draws), so
     /// the same reason as v4->v5 applies: a v5 save must regenerate rather
     /// than be served relics whose names were composed under the old scheme.
+    /// v7: restriction relics are no longer guaranteed in every run (defect
+    /// report 2026-09-18). The passive band took the restriction branch on
+    /// EVERY slot that reached it, and there are exactly six restriction
+    /// fragments, so the band exhausted all six in 67 of 68 measured seeds.
+    /// Every run therefore shipped the same six restriction relics, and since a
+    /// name is a pure function of the fragments (v6) and all six restrictions
+    /// carry Ancient provenance, the same six names AND texts reappeared run
+    /// after run ("Antler Choker" and "Fiddle Preparation" each appeared in 4 of
+    /// 8 sampled real seeds). The branch is now gated by
+    /// <see cref="RestrictionRelicChancePercent"/>, so a run draws a
+    /// seed-dependent SUBSET. RNG-shape change, same reason as v5->v6.
     /// </summary>
-    public const string SeedVersion = "relics-v6";
+    public const string SeedVersion = "relics-v7";
 
     /// <summary>Chance a slot samples a second effect (both bound to the trigger).</summary>
     private const int TwoEffectChancePercent = 30;
@@ -206,6 +217,26 @@ public static class RelicGenerator
     };
 
     private const int NormalWeight = 100;
+
+    /// <summary>
+    /// Chance a passive-band slot takes the restriction-pair branch rather than
+    /// a plain passive (defect report 2026-09-18).
+    ///
+    /// The branch used to fire whenever any unused restriction remained. The
+    /// passive band is 15% of 60 slots (~9-15 slots per run) and there are only
+    /// six restriction fragments, so the band drained all six in 67 of 68
+    /// measured seeds: EVERY run shipped the same six restriction relics. Their
+    /// names are a pure function of the fragments (v6) and all six carry Ancient
+    /// provenance, so the same six names and the same six descriptions reappeared
+    /// run after run - measured on 8 real user seeds, "Antler Choker" and
+    /// "Fiddle Preparation" each showed up in 4 of them. That is the
+    /// "relics are never really random" report.
+    ///
+    /// Gating the branch turns the six into a seed-dependent SUBSET instead of a
+    /// constant, which is the property the rest of the generator already has
+    /// (cross-seed same-slot name overlap measured at 0.2%).
+    /// </summary>
+    private const int RestrictionRelicChancePercent = 30;
 
     /// <summary>
     /// Downside fragments draw UNIFORMLY with everything else (user order
@@ -535,7 +566,7 @@ public static class RelicGenerator
                 pairs.Add((candidate, offset));
             }
         }
-        if (pairs.Count > 0)
+        if (pairs.Count > 0 && random.Next(100) < RestrictionRelicChancePercent)
         {
             var (restriction, offset) = pairs[random.Next(pairs.Count)];
             // Only the RESTRICTION is consumed. The offset is a generic

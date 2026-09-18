@@ -1056,3 +1056,88 @@ Client       -> 不剥离(host 的镜像)
 
 **未验证**: MP 客户端路径本身未实机验证(需双端会话). 单机启动验证: 9 补丁类 0 失败, 自检报告
 两个 `Populate` 重载与 `LoadFromSerializable` 均解析, 0 崩溃, 0 AAR 错误.
+
+## 2026-09-18 缺陷: "遗物从来没有真正随机" -- 限制类词条每局固定 (SeedVersion v7)
+
+### 用户报告 (Steam 版实测 + 工坊留言板多名用户)
+
+- 用户: "东尼遗物从来没有被真正随机, 所有种子的遗物都是同样的."
+- 工坊 `好咸的一条` (15 Sep): "同一个存档遗物永远是一批, 不管开多少吧, **遗物效果都没有重随**,
+  而且全是负面的, 各种塞诅咒, 扣血上限, 失去所有金币."
+- 工坊 `ikuseiso` (16 Sep): "我居然能看到**只有一个效果的遗物**: 每回合开始塞一个诅咒牌."
+
+### 先证伪了错误的那一半主张
+
+"所有种子的遗物完全相同" **不成立**. 决定性实验(离线 probe, 8 个真实种子):
+
+- 同槽位**名字**跨种子重合率 **0.2%**; 每个 run 内 60 个名字**互不相同**(60/60).
+- 8 个真实 run 合起来 480 个槽位里出现 **384 个不同定义**.
+- 用户真实存档里的稀有度分布随种子变化(两档对比 33/60 槽位不同).
+- 游戏日志里的真实种子 `1ZSDT8AZFNH9` 离线复现**逐字一致**(slot 4 提琴背包 / slot 24 鹿角颈圈).
+
+所以生成器本身是种子相关的, 根因不在这里.
+
+### 根因: 限制类词条池被每局抽干, 6 件固定遗物每局都出现
+
+`PickPassives` 的 restriction 分支**只要还有未用过的 restriction 就必进**:
+
+```csharp
+if (pairs.Count > 0)          // v6 及以前
+{
+    var (restriction, offset) = pairs[random.Next(pairs.Count)];
+```
+
+而 restriction fragment **恰好只有 6 个**, 被动带却是 15% x 60 ≈ 9-15 个槽位. 实测 **68 个种子里
+67 个把 6 个 restriction 全部抽完**. 又因为 v6 起名字是片段的纯函数, 且 6 个 restriction 全部
+带先古 provenance, 于是**每局都出现同样 6 个名字 + 同样 6 条描述**:
+
+```
+= 8 个真实种子里都出现的描述 (v6) =
+  Enemies gain 1 Strength when they enter combat and gain 1 additional Energy.
+  Power cards cost 1 more and gain 1 additional Energy.
+  You can no longer gain Gold and gain 1 additional Energy.
+  You can no longer obtain potions and gain 1 additional Energy.
+  You cannot play more than 6 cards each turn and gain 1 additional Energy.
+  Card effects no longer draw cards for you and draw 2 additional cards on turn 1 of each combat.
+```
+
+名字层同样固定: "Antler Choker" / "Fiddle Preparation" 各自出现在 **8 个真实种子中的 4 个**.
+这就是"遗物没有重随 / 永远是同一批"的直接来源 -- 玩家每局都会看到这几件.
+
+### 修复: 给 restriction 分支加槽位级门控 (SeedVersion v7)
+
+```csharp
+if (pairs.Count > 0 && random.Next(100) < RestrictionRelicChancePercent)   // 30
+```
+
+`RestrictionRelicChancePercent = 30` -- 与被动的 15% 带同量级, 保留"限制类词条会出现"的设计,
+但把**每局固定 6 个**改成**随种子变化的子集**.
+
+### 验证 (全部实测)
+
+- 探针 `PROBE OK`; `soak: every trigger fragment reachable` PASS;
+  `soak: only max-HP-policy fragments unreachable` PASS.
+- 68 个种子的 restriction 数量直方图: 修复前 `6->67 3->1`(67/68 都是满 6 个),
+  修复后 `0->5 1->7 2->17 3->16 4->12 5->6 6->5`.
+- **跨全部 68 个种子都出现的描述: 7/60 -> 0/60**.
+- 两两平均共享描述 16.4%(修复前同类指标含那 7 条恒定项).
+- 每个 run 内名字仍然 60/60 唯一; 指纹重复 0.
+- 实机启动(副本 A `E:\Slay the Spire 2`, d3d12): 9 补丁类 0 失败, 池构成 156/47/26 与
+  15 triggers/31 triggered/8 passives/5 benefits 不变, 0 崩溃, 0 AAR 错误.
+
+### 顺带查清的两个非缺陷 (不得再误判)
+
+1. **"重载后遗物相同"是正确行为**. 用户日志里 8 次 `continue_reload` / 4 次 `hard_reload`,
+   整份日志只有 **1 次全新开局**(`Embarking on a singleplayer IRONCLAD run ... Seed: 1ZSDT8AZFNH9`).
+   读档保留同一 seed 是设计契约("同种子 = 同一批遗物"), 不是 bug.
+2. **同一 run 内描述重复是**既有现象, 非本次引入. 把门控置 100(等价修复前行为)复测:
+   60 个种子里 56 个存在重复描述; 置 30 后 60/60. 因为 fragment 空间只有 59 个, 60 个槽位必然
+   有复用(60 件遗物 > 44 个效果片段). 名字不同、描述相同 -- 属设计取舍, 未在本轮改动范围.
+
+### 未闭环 (诚实标注)
+
+- **实机开局验证未做**: 后台点击/键盘对 Godot 无效, 且游戏无任何控制台命令能开局, 需要用户在场.
+  本次只验证到"启动 + 池构建 + 补丁挂载"; 每局限制类词条子集变化由 68 种子离线测量覆盖.
+- 工坊反馈里"很多遗物没有正常生效"在本轮全部日志里**没有对应异常**(`skipped: no combat context` /
+  `failed; continuing` / `unsupported ...` 计数均为 0), 未定位到具体案例; 若复现需玩家提供种子.
+- "全是负面"未改动: 负面占比由用户 2026-09-17 指令(取消权重加成 + 均匀抽取)确定, 本轮不擅自变更.
