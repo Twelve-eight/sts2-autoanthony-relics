@@ -798,14 +798,17 @@ public static class RelicGenerator
         // like the benefit band above.
         //
         // It deliberately does NOT re-serve an already-used fragment (which is
-        // what PickEligiblePassive used to do here). Re-serving made the passive
-        // band draw the ENTIRE pool every run: there are 8 plain passives and a
-        // run reaches the band ~10-13 times, so every seed ended up containing
-        // every passive, and the two fragments that entered first (extra_turn,
-        // modify_hand_draw -2) appeared in 8 of 8 sampled real seeds - the same
-        // class of defect as the v7 restriction saturation, which the
-        // cross-seed variety assertion caught here. Letting the slot become a
-        // triggered relic instead keeps the passive band a seed-dependent
+        // what PickEligiblePassive used to do here). The pools are far smaller
+        // than the number of times a run enters their band - PassiveEffects
+        // holds 8 fragments of which only 2 are plain (the other 6 are
+        // restrictions, gated behind RestrictionRelicChancePercent), and
+        // BenefitEffects holds 5 - so re-serving kept re-emitting the same few
+        // fragments. Measured over 200 seeds: with the re-serve the peak
+        // description appeared in 196/200 runs (98%), without it 121/200
+        // (60.5%). The two pinned descriptions were one per band - "Draw 2
+        // fewer cards on turn 1" (a plain passive) and "Take an extra turn if
+        // you play no cards" (a benefit, NOT a passive). Letting the slot
+        // become a triggered relic instead keeps each band a seed-dependent
         // SUBSET.
         EffectFragment? passive = PickWeightedUniquely(random, pool.PassiveEffects,
             e => usedPassives.Add(e.ShapeKey),
