@@ -351,6 +351,19 @@ internal static class Program
             "same seed -> byte-identical relic set");
         Check(!run1.Select(d => d.Fingerprint).SequenceEqual(run3.Select(d => d.Fingerprint)),
             "different seed -> different relic set");
+        // The description tells players the set is BYTE-IDENTICAL for a given seed. Fingerprint
+        // covers rarity / trigger / effects / values but NOT the rendered name or text, so the
+        // checks above only prove content identity. Assert the visible strings too, otherwise the
+        // claim rests on construction rather than evidence.
+        static string Visible(GeneratedRelicDefinition x) =>
+            x.NameEn + "\u0001" + x.NameZhs + "\u0001" + x.DescriptionEn + "\u0001" + x.DescriptionZhs;
+        Check(run1.Select(Visible).SequenceEqual(run2.Select(Visible)),
+            "same seed -> identical names and descriptions (not just content)",
+            run1.Select(Visible).SequenceEqual(run2.Select(Visible))
+                ? $"{run1.Count} slots match on name+text"
+                : string.Join(" | ", run1.Zip(run2)
+                    .Where(t => Visible(t.First) != Visible(t.Second))
+                    .Take(2).Select(t => $"slot {t.First.Slot}: '{Visible(t.First)}' vs '{Visible(t.Second)}'")));
 
         bool shapeOk = run1.All(d => d.Effects.Count > 0
             && (d.Trigger is null ? d.Effects.All(e => e.IsPassive) : d.Effects.All(e => !e.IsPassive)));
