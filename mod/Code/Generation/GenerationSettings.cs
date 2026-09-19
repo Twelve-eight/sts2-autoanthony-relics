@@ -46,7 +46,11 @@ internal readonly struct GenerationSettings
         int weightBenefitCore,
         int weightExtra,
         bool disableNegativeEffects = false,
-        bool disableIneffectiveEffects = false)
+        // Defaults to the SHIPPED value (the config property initializer and
+        // Default both say true). A caller that forgets this argument must model
+        // what a player gets, not the opposite - that drift is exactly how the
+        // probes once ended up validating an OFF configuration.
+        bool disableIneffectiveEffects = true)
     {
         IncludeExtraPool = includeExtraPool;
         WeightTriggeredCore = Clamp(weightTriggeredCore);
@@ -83,8 +87,11 @@ internal readonly struct GenerationSettings
     /// there (there is no turn left). See EffectFragment.CombatScopedOpcodes and
     /// RelicGenerator.Excluded rule 9 for the exact set.
     ///
-    /// Off by default, like the other content-removing options. Tier-1 MP
-    /// determinism key - both ends must match.
+    /// ON by default, unlike the other content-removing options: a dead effect
+    /// is a defect, not content a player might want. MUST stay in step with
+    /// AutoAnthonyRelicsConfig.DisableIneffectiveEffects and with
+    /// <see cref="Default"/> - a mismatch would make the offline probes model a
+    /// configuration no player gets. Tier-1 MP determinism key.
     /// </summary>
     internal bool DisableIneffectiveEffects { get; }
 
@@ -200,7 +207,7 @@ internal readonly struct GenerationSettings
     /// </summary>
     internal static void FreezeExplicit(bool includeExtraPool, int weightTriggeredCore,
         int weightPassiveCore, int weightBenefitCore, int weightExtra,
-        bool disableNegativeEffects = false, bool disableIneffectiveEffects = false)
+        bool disableNegativeEffects = false, bool disableIneffectiveEffects = true)
     {
         _frozen = new GenerationSettings(includeExtraPool, weightTriggeredCore,
             weightPassiveCore, weightBenefitCore, weightExtra, disableNegativeEffects,

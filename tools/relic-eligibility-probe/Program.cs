@@ -389,7 +389,11 @@ internal static class Program
         var extraOnUnreachable = new List<string>();
         var extraOnIllegal = new List<string>();
         GenerationSettings.FreezeExplicit(includeExtraPool: true, weightTriggeredCore: 100,
-            weightPassiveCore: 100, weightBenefitCore: 100, weightExtra: 100);
+            weightPassiveCore: 100, weightBenefitCore: 100, weightExtra: 100,
+            // Explicit, not defaulted: this section must model the SHIPPED
+            // configuration, so the value is stated rather than inherited from a
+            // parameter default that could drift away from the config again.
+            disableIneffectiveEffects: true);
         try
         {
             var extraKeys = pool.TriggeredEffects.Where(e => e.Pool == FragmentPoolKind.Extra)
@@ -435,7 +439,11 @@ internal static class Program
         // 2026-09-19). Only with the pool enabled does rule 7 carry the load.
         var timingViolations = new List<string>();
         GenerationSettings.FreezeExplicit(includeExtraPool: true, weightTriggeredCore: 100,
-            weightPassiveCore: 100, weightBenefitCore: 100, weightExtra: 100);
+            weightPassiveCore: 100, weightBenefitCore: 100, weightExtra: 100,
+            // Explicit, not defaulted: this section must model the SHIPPED
+            // configuration, so the value is stated rather than inherited from a
+            // parameter default that could drift away from the config again.
+            disableIneffectiveEffects: true);
         try
         {
             timingViolations.AddRange(from kind in kinds
