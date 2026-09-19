@@ -2,6 +2,7 @@ using System.Text;
 using AutoAnthonyRelics;
 using AutoAnthonyRelics.Data;
 using AutoAnthonyRelics.Generation;
+using MegaCrit.Sts2.Core.Entities.Relics;
 
 namespace RelicProbe;
 
@@ -953,6 +954,40 @@ internal static class Program
             "timing: hand-effect trigger set is a non-trivial subset of the pool's triggers",
             $"hand={string.Join(",", EffectFragment.HandEffectTriggers)} pool={pool.Triggers.Count}");
 
+        // ---- 8a9. RARITY DISTRIBUTION (2026-09-20).
+        // The generator rolls rarity per slot: random.Next(100) < 45 Common, < 80 Uncommon,
+        // else Rare (RelicGenerator.cs:577-582; the retry path uses the same cutoffs). The
+        // Workshop description states the resulting split, and it DRIFTED once already - the
+        // description claimed "20 Common / 21 Uncommon / 19 Rare", making Rare the second
+        // largest band when the code makes it the smallest. A one-off measurement fixed that
+        // occurrence only, so the split is asserted here: if the cutoffs change (or the
+        // description drifts again), this fails instead of shipping a wrong number.
+        {
+            const int RaritySeeds = 200;
+            var rc = new Dictionary<RelicRarity, int>();
+            int rtotal = 0;
+            for (int i = 0; i < RaritySeeds; i++)
+            {
+                foreach (var def in RelicGenerator.Generate($"rarity-{i}", pool))
+                {
+                    rc[def.Rarity] = rc.GetValueOrDefault(def.Rarity) + 1;
+                    rtotal++;
+                }
+            }
+            double c = 100.0 * rc.GetValueOrDefault(RelicRarity.Common) / rtotal;
+            double u = 100.0 * rc.GetValueOrDefault(RelicRarity.Uncommon) / rtotal;
+            double r = 100.0 * rc.GetValueOrDefault(RelicRarity.Rare) / rtotal;
+            // Expectation from the cutoffs: 45 / 35 / 20. Tolerance is wide enough for sampling
+            // noise across 12000 slots but far too tight to admit the drifted claim (20/21/19
+            // would put Rare at 31.7%, i.e. 11.7 points off).
+            Check(Math.Abs(c - 45) <= 3 && Math.Abs(u - 35) <= 3 && Math.Abs(r - 20) <= 3,
+                "rarity: measured split matches the generator's 45/35/20 cutoffs",
+                $"common={c:F2}% uncommon={u:F2}% rare={r:F2}%");
+            // The specific inversion that was shipped wrong: Rare must be the SMALLEST band.
+            Check(r < c && r < u,
+                "rarity: Rare is the smallest band (the description once claimed it was second largest)",
+                $"common={c:F2}% uncommon={u:F2}% rare={r:F2}%");
+        }
         // ---- 8b. CROSS-SEED VARIETY (defect report 2026-09-18).
         //
         // Every assertion above tests a property that was PASSING while the mod
