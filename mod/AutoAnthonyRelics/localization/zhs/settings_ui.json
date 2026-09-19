@@ -15,6 +15,8 @@
   "AUTOANTHONYRELICS-WEIGHT_EXTRA.hover.desc": "额外池相对于核心池的贡献份额.这一项还会在触发档内部重新加权,因为核心与额外片段在那里是一起抽的.额外词条池关闭时此项无效.多人游戏:所有玩家必须使用相同取值.",
   "AUTOANTHONYRELICS-DISABLE_NEGATIVE_EFFECTS.title": "关闭所有负面效果",
   "AUTOANTHONYRELICS-DISABLE_NEGATIVE_EFFECTS.hover.desc": "开启时:生成的遗物不再带有任何负面效果 -- 不会失去生命/生命上限/金币,不会获得诅咒,不会使手牌虚无,也不会出现先古之民的限制类词条(金币/药水/出牌数/抽牌限制,能力牌费用 +1,敌人获得力量).默认关闭.注意:[b]回合结束不自动丢弃手牌[/b] 不算负面效果,仍可能出现 -- 它只会保留你本来会失去的牌.多人游戏:此项参与生成,所有玩家必须使用相同取值.",
+  "AUTOANTHONYRELICS-DISABLE_INEFFECTIVE_EFFECTS.title": "避免无效效果",
+  "AUTOANTHONYRELICS-DISABLE_INEFFECTIVE_EFFECTS.hover.desc": "默认开启:遗物不会再抽到「在其触发时机根本无法生效」的效果 -- 例如「每场战斗结束时获得格挡」(战斗已结束,格挡随之清除)或在此处「获得能量」(已无回合可用).以下两类无论开关如何都不会生成:战斗结束时对敌人造成伤害或减益(此时敌人已全部死亡),以及非战斗状态下需要战斗的效果.关闭此项可让这类遗物重新出现. 多人游戏:此项参与生成,所有玩家必须使用相同取值.",
   "AUTOANTHONYRELICS-SETTINGS_GROUP.title": "东尼算法 - 遗物",
   "AUTOANTHONYRELICS-SETTINGS_OPEN.title": "打开设置",
   "AUTOANTHONYRELICS-SETTINGS_PAGE_TITLE.title": "东尼算法 - 遗物",

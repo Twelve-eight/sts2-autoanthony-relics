@@ -491,7 +491,29 @@ public static class RelicGenerator
         //    rebuild mid-run - the thing the cache key exists to avoid - is not
         //    needed. See EffectFragment.IsNegative for what counts as negative;
         //    retain_hand is explicitly NOT negative.
-        || (effect.IsNegative && GenerationSettings.Current.DisableNegativeEffects);
+        || (effect.IsNegative && GenerationSettings.Current.DisableNegativeEffects)
+        // 9. "Effects must not be ineffective" (user order 2026-09-19). A
+        //    combat-scoped effect on a trigger that fires AFTER the combat ended
+        //    cannot do anything: block is cleared with the combat, energy has no
+        //    turn left to be spent in, a Power applied to yourself is discarded
+        //    with the combat state, and cards drawn go nowhere. Measured at 638
+        //    such pairs across 200 seeds (~3 dead relics per run), e.g. "at the
+        //    end of each combat, gain 14 Block".
+        //
+        //    Only the SELF-target remainder needs this rule: enemy-targeted
+        //    effects on these triggers are already rejected unconditionally by
+        //    rule 4 (every enemy is dead by then), and the no-combat-context
+        //    direction is rule 4 as well. The other half of the order - "outside
+        //    combat, give energy/buffs/debuffs" - is therefore already covered;
+        //    this rule closes the gap the user's first example points at.
+        //
+        //    OFF-switchable, unlike rule 4: a dead effect is undesirable but not
+        //    structurally broken (the engine just no-ops), so the option is
+        //    available rather than forced. Default is ON.
+        || (GenerationSettings.Current.DisableIneffectiveEffects
+            && trigger is not null
+            && TriggersAfterEnemiesAreDead.Contains(trigger.Kind)
+            && EffectFragment.CombatScopedOpcodes.Contains(effect.Opcode));
 
     public static IReadOnlyList<GeneratedRelicDefinition> Generate(string runSeed, RelicFragmentPool pool)
     {

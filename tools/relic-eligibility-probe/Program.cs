@@ -125,7 +125,15 @@ internal static class Program
         // restriction opcodes - so the oracle stays honest only as long as it
         // reads the SAME property the generator reads rather than re-listing the
         // opcodes here (a re-listed copy would silently drift).
-        || (effect.IsNegative && GenerationSettings.Current.DisableNegativeEffects);
+        || (effect.IsNegative && GenerationSettings.Current.DisableNegativeEffects)
+        // Rule 9 (user order 2026-09-19): "prevent ineffective effects". A
+        // combat-scoped effect on a post-combat trigger cannot do anything.
+        // Reads the SAME sets the generator reads rather than re-listing opcodes,
+        // so the oracle cannot drift from the implementation.
+        || (GenerationSettings.Current.DisableIneffectiveEffects
+            && triggerKind is not null
+            && (triggerKind == "combat_end" || triggerKind == "combat_victory")
+            && EffectFragment.CombatScopedOpcodes.Contains(effect.Opcode));
 
     /// <summary>The full exclusion contract the generator must implement.</summary>
     private static bool OracleExcluded(string? triggerKind, EffectFragment effect) =>

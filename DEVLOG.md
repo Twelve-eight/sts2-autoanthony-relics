@@ -1610,3 +1610,85 @@ bug 一直没暴露. 已改为 `@(...).Count`. **这是既有缺陷, 非本轮�
   `exit 5`. 该账号**必须**每次提供新的 Steam Guard 码.
 - 第一次带码推送(`VT2HT`)因我方回合超时**在登录阶段被杀**, 未上传任何内容
   (`workshop_log.txt` 无新增 Upload 行) -- 此后改为后台任务运行, 第二次(`V2RG3`)成功.
+
+
+## WS-0919-06 避免无效效果 (规则 9)
+
+**用户指令**: "增加一个选项, 使遗物效果不会无效(如战斗结束给敌方减益, 伤害)或者非战斗中给予能量, 增益, 减益."
+
+### 先测再写: 638 对死配对
+
+写代码前先枚举 200 个种子 x 全部遗物 x 全部效果, 判定 (触发时机, 效果 opcode) 是否可能
+产生可观测结果. 用户举的两个例子**已被既有规则 4 覆盖**(规则 4 无条件拒绝"非战斗状态下
+需要战斗的效果"与"战斗结束时对敌方的效果" -- 那时敌人已全死). 真正的洞是第三类:
+
+**触发在战斗结束后 x 效果作用域是本场战斗, 且目标是自身** -> **638 对 / 200 种子**,
+约每局 3 件死遗物. 实例 `combat_end x gain_block`(战斗已结束, 格挡已清),
+`combat_victory x apply_power/thorns/self`(Power 随战斗状态丢弃).
+
+### 实现
+
+- `GenerationSettings.DisableIneffectiveEffects` -- 字段 + `Key` 第 3 bit + `FreezeExplicit`
+  参数 + `Default`.
+- `AutoAnthonyRelicsConfig.DisableIneffectiveEffects { get; set; } = **true**`(默认**开**).
+  与其它"删内容"选项相反的理由: 死效果是**缺陷**不是内容, 玩家不会"就想要"一个什么都不做的
+  遗物, 所以默认保证; `DisableNegativeEffects` 删的是真内容, 默认关.
+- `RelicGenerator.Excluded` **规则 9**:
+  `DisableIneffectiveEffects && trigger != null
+   && TriggersAfterEnemiesAreDead.Contains(trigger.Kind)
+   && EffectFragment.CombatScopedOpcodes.Contains(effect.Opcode)`.
+- `MainFile.cs` ConfigSource 传第 7 参; 日志加 `disableIneffective=`.
+- loc 6 条(eng/zhs). zhs 用 `\u300c` 转义, 因为中文描述里的 `"` 会破坏 Python 字面量
+  (本轮踩了一次, 见下).
+
+### 规则 9 可关 / 规则 4 不可关
+
+规则 4 拒绝的是**结构性死文本**(效果指向已死敌人, 描述本身就是错的), 无开关.
+规则 9 拒绝的是引擎 no-op(文本没错, 只是该时机无事可做), 给开关.
+
+### 不 bump `SeedVersion`
+
+`SeedVersion` 参与 RNG 流字符串(`RelicGenerator.cs:506`). bump 会重掷**所有**局,
+包括选项为关(行为与旧版逐字节相同)的局 -- 白白破坏玩家的种子记忆.
+选项已通过 `GenerationSettings.Key` 进定义缓存键与 loc 去重键, 切换时正确重生成.
+保持 `relics-v8`.
+
+### 踩到的坑
+
+1. **`GenerationSettings.Default` 与 config 初值不一致**: 最初写 `disableIneffectiveEffects: false`,
+   而 config 属性初值 `true`. `Default` 是离线探针未绑定 `ConfigSource` 时读到的值 ->
+   探针测的是玩家拿不到的配置, 规则 9 在探针里等于没测. 已改 `true` 并在 `Default` 上写明
+   "MUST track AutoAnthonyRelicsConfig's initializers". `relic-probe` 的
+   `GenerationSettingsTest.Set` 的 `disableIneffective` 缺省值同步改为 `true`.
+2. **Python heredoc 里的中文引号**: zhs 描述含 `"..."`, 直接放进 Python 字符串字面量 ->
+   `SyntaxError`. 改用 `\u300c`/`\u300d` 转义.
+3. **非空性断言必须有**: 只断言"开着时死配对为 0"是不够的 -- 一个把一切都排除的回归也会通过.
+   加了"关着时必须 > 0"与"combat_end/combat_victory 触发仍可达"两条.
+
+### 验证 (全部实测)
+
+- `relic-probe`: 3 条新断言 PASS, `PROBE OK`.
+- **判别力**: 规则 9 判据替换为 `&& false` -> 重建 -> 断言 2 立即 FAIL 并报出
+  `combat_end x gain_block/immediate/self | combat_victory x gain_block/immediate/self |
+  combat_end x apply_power/strength/self | combat_victory x apply_power/thorns/self`. 已还原.
+- `relic-eligibility-probe`: `PolicyExcluded` 加规则 9(读**同一批集合**而非重抄 opcode 列表),
+  `PROBE OK`, 含可达性断言.
+- **实机**(测试副本 A, `E:\Slay the Spire 2\`, d3d12 + VeryDebug):
+  - `relic pool: 165 extracted atoms, 47 ledger-supported (+9 extra), 26 ledger-rejected;
+    fragments: 15 triggers, 40 triggered effects, 8 passives, 5 benefits`
+  - `initialized: enabled=True, replaceVanilla=True, extraPool=False, disableNegatives=False,
+    **disableIneffective=True**, weights(triggered/passive/benefit/extra)=100/100/100/100`
+    -> 选项**确实以出厂默认 True 抵达生成器**(配置键缺失时走属性初值, 实测有效).
+  - `Harmony: 9 patch class(es) applied, 0 failed`; **AAR 自身 ERROR 数 = 0**.
+  - `[QuriousCraftingRelics] cfg migration skipped: AutoAnthonyRelics.cfg does not match the
+    Qurious legacy schema` -> 跨 mod 配置键碰撞的修复仍然有效.
+  - 游戏退出后复查 cfg: 新键 `"DisableIneffectiveEffects": "True"` 已由 BaseLib 写回,
+    其余仍为出厂默认(`False`/`False`, 权重全 `100`).
+  - **日志里唯一的 `[ERROR]` 属于另一个 mod**: `[AutoAnthony] Startup initialization failed...
+    Expected 65 complete v111 Colorless cards, found 77` 来自 `AutoAnthony.ChaosRunDefinitions`
+    (混沌 mod), 与 AAR 无关. 已用 `grep 'ERROR.*AutoAnthonyRelics'` 计数确认 = 0.
+
+### 未覆盖的验证缺口
+
+- 真实战斗中"死遗物消失"的**肉眼确认**需用户开局(后台输入对 Godot 无效).
+- **MP 两端一致性**未实测.

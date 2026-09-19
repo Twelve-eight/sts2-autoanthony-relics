@@ -31,11 +31,15 @@ internal static class Program
     {
         public static void Set(bool? includeExtraPool = null, int? weightTriggered = null,
             int? weightPassive = null, int? weightBenefit = null, int? weightExtra = null,
-            bool? disableNegatives = null) =>
+            bool? disableNegatives = null, bool? disableIneffective = null) =>
             GenerationSettings.FreezeExplicit(
                 includeExtraPool ?? false,
                 weightTriggered ?? 100, weightPassive ?? 100, weightBenefit ?? 100, weightExtra ?? 100,
-                disableNegatives ?? false);
+                disableNegatives ?? false,
+                // Defaults to the SHIPPED default (true), not to false: a probe
+                // that silently ran with the option off would measure a
+                // configuration no player gets.
+                disableIneffective ?? true);
 
         public static void Reset() => GenerationSettings.Unfreeze();
     }
@@ -721,6 +725,96 @@ internal static class Program
         }
         Check(malformed.Count == 0, "negatives: every slot stays well-formed (no trigger with zero effects)",
             malformed.Count == 0 ? "none" : string.Join(",", malformed.Take(4)));
+
+        // ---- 8a7. "PREVENT INEFFECTIVE EFFECTS" (user order 2026-09-19).
+        // A combat-scoped effect on a trigger that fires AFTER the combat ended
+        // cannot do anything (block is cleared, no turn is left for energy, a
+        // self Power dies with the combat state). Measured at 638 such pairs
+        // across 200 seeds before this option existed.
+        //
+        // The check is on the OBSERVABLE pair (trigger kind x opcode), not on
+        // Excluded itself, so it stays meaningful even if the rule is rewritten.
+        static bool DeadPair(GeneratedRelicDefinition def, EffectFragment e) =>
+            def.Trigger is not null
+            && (def.Trigger.Kind == "combat_end" || def.Trigger.Kind == "combat_victory")
+            && EffectFragment.CombatScopedOpcodes.Contains(e.Opcode);
+
+        var deadOff = new List<string>();
+        GenerationSettingsTest.Set(includeExtraPool: true, disableIneffective: false);
+        try
+        {
+            for (int i = 0; i < 200; i++)
+            {
+                foreach (var def in RelicGenerator.Generate($"soak-{i}", pool))
+                {
+                    foreach (var e in def.Effects)
+                    {
+                        if (DeadPair(def, e))
+                        {
+                            deadOff.Add($"{def.Trigger!.Kind} x {e.Opcode}/{e.Variant}/{e.Target}");
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        // With the option OFF the pairs must still be generated - otherwise the
+        // option would be indistinguishable from the default and a regression
+        // that excluded everything would pass.
+        Check(deadOff.Count > 0,
+            "ineffective: combat-scoped effects on combat-end triggers exist when the option is OFF",
+            $"{deadOff.Count} pairs, e.g. {deadOff.FirstOrDefault()}");
+
+        var deadOn = new List<string>();
+        GenerationSettingsTest.Set(includeExtraPool: true, disableIneffective: true);
+        try
+        {
+            for (int i = 0; i < 200; i++)
+            {
+                foreach (var def in RelicGenerator.Generate($"soak-{i}", pool))
+                {
+                    foreach (var e in def.Effects)
+                    {
+                        if (DeadPair(def, e))
+                        {
+                            deadOn.Add($"{def.Trigger!.Kind} x {e.Opcode}/{e.Variant}/{e.Target}");
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        Check(deadOn.Count == 0,
+            "ineffective: NO combat-scoped effect on a combat-end trigger when the option is ON",
+            deadOn.Count == 0 ? "none" : string.Join(" | ", deadOn.Distinct().Take(4)));
+        // Non-vacuity: the combat-end triggers must still be reachable, i.e. the
+        // rule removed pairings and not whole triggers (a relic with a trigger
+        // and no legal effect would be malformed).
+        var endTriggersOn = new HashSet<string>(StringComparer.Ordinal);
+        GenerationSettingsTest.Set(includeExtraPool: true, disableIneffective: true);
+        try
+        {
+            for (int i = 0; i < 200; i++)
+            {
+                foreach (var def in RelicGenerator.Generate($"soak-{i}", pool))
+                {
+                    if (def.Trigger is not null) endTriggersOn.Add(def.Trigger.Kind);
+                }
+            }
+        }
+        finally
+        {
+            GenerationSettingsTest.Reset();
+        }
+        Check(endTriggersOn.Contains("combat_end") && endTriggersOn.Contains("combat_victory"),
+            "ineffective: combat-end triggers stay reachable (the rule prunes pairs, not triggers)",
+            $"combat_end={endTriggersOn.Contains("combat_end")} combat_victory={endTriggersOn.Contains("combat_victory")}");
         // retain_hand must be reachable in BOTH states - it is the case the user
         // called out, and a naive implementation that treated every veto-shaped
         // hook as negative would silently remove it.

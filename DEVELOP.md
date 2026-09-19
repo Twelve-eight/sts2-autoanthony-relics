@@ -540,3 +540,89 @@ BigMushroom(-2, 也被本选项关掉), 即**只剩 1 个**可用的普通被动
 - 良构性: 200 seeds 默认设置 + 120 seeds 开启负面开关(后者是**新增**断言 --
   默认 soak 看不到该配置), 每个槽位 `Effects.Count > 0`, 不存在"有触发但无效果"的遗物.
 - `fix.Values` 之外无其它 Dictionary 迭代进入生成路径.
+
+
+## 避免无效效果 (2026-09-19 用户指令, SeedVersion v8)
+
+### 用户指令
+
+> 增加一个选项, 使遗物效果不会无效(如战斗结束给敌方减益, 伤害)或者非战斗中给予能量, 增益, 减益.
+
+### 先测, 再实现: 这是真实缺陷而非臆测
+
+用户举的两个例子**已经**被既有规则覆盖, 但普查发现真正的洞在别处.
+对 200 个种子逐遗物逐效果枚举 (触发时机 x 效果 opcode) 配对, 用"该效果在此触发时机
+是否可能产生任何可观测结果"判定:
+
+| 判据 | 覆盖它的规则 | 实测配对数 |
+|---|---|---|
+| 非战斗状态下需要战斗的效果 | 规则 4 (无条件) | 已覆盖 |
+| 战斗结束时对**敌方**造成伤害/减益(敌人已全死) | 规则 4 (无条件) | 已覆盖 |
+| **战斗已结束的触发 x 自身战斗类效果** | **无 -- 本轮新增规则 9** | **638 对 / 200 种子** |
+
+638 对约合**每局 3 件死遗物**, 实例: `combat_end x gain_block`("每场战斗结束时获得
+14 点格挡" -- 战斗已结束, 格挡随之清除), `combat_victory x gain_block`,
+`combat_end x apply_power/strength/self`, `combat_victory x apply_power/thorns/self`.
+
+**结论: 用户描述的是同一个缺陷的两个侧面, 规则 4 只补了一半.**
+
+### 为什么规则 9 只判"自身"方向
+
+敌人目标的效果挂在 `combat_end`/`combat_victory` 上时**必然**无效(此时敌人已全部死亡),
+规则 4 已无条件拒绝, 规则 9 不需要重复实现. 同理"非战斗状态下需要战斗"也是规则 4.
+规则 9 只补剩下的那一半: **触发在战斗结束后发生 x 效果作用域是本场战斗** --
+格挡随战斗清除, 能量已无回合可花, 加给自己的 Power 随战斗状态丢弃, 抽到的牌无处可去.
+
+### 规则 9 可关, 规则 4 不可关 (设计决定)
+
+规则 4 拒绝的是**纯死文本**(结构性破坏: 一个指向已死敌人的效果, 描述本身就是错的),
+所以它**没有开关**. 规则 9 拒绝的是引擎层面的 no-op(效果文本没错, 只是在该时机无事可做),
+属于"不想要但不破坏结构", 所以**给开关**. 这也是为什么 `DisableIneffectiveEffects`
+默认**开**(见下).
+
+### `DisableIneffectiveEffects` 默认开 (与其它"删内容"选项相反)
+
+`EnableExtraEffectPool` 默认关, `DisableNegativeEffects` 默认关 -- 它们删的是**内容**
+(玩家可能就想要那些). 死效果不是内容, 是**缺陷**, 所以默认保证开启, 除非玩家主动关掉.
+
+它是 **Tier-1 MP 确定性键**(进 `GenerationSettings.Key` 第 3 bit), 联机两端必须一致.
+
+### 命名检查 (跨 mod 配置键碰撞的教训)
+
+新增配置属性前必须查 `QuriousCraftingRelics` 的 `KnownLegacyScalarKeys` 与
+`Cost_/Refund_/Min_/Max_` 前缀. `DisableIneffectiveEffects` 已确认无碰撞; 实机日志
+`cfg migration skipped: AutoAnthonyRelics.cfg does not match the Qurious legacy schema`
+再次确认.
+
+### 一个必须记住的坑: `GenerationSettings.Default` 必须与 config 默认一致
+
+`Default` 是**离线探针**在未绑定 `ConfigSource` 时读到的值(也是 `MainFile` 绑定前的兜底).
+本轮最初把它写成 `disableIneffectiveEffects: false`, 而 config 属性初值是 `true` --
+探针于是测的是**玩家永远拿不到的配置**, 规则 9 在探针里等于没测. 已修正为 `true`,
+并在 `Default` 上写明"MUST track AutoAnthonyRelicsConfig's initializers".
+`tools/relic-probe` 的 `GenerationSettingsTest.Set` 同理: `disableIneffective` 缺省值为
+**`true`**(随出厂默认), 而不是 `false`.
+
+### 不 bump `SeedVersion`
+
+`SeedVersion` 参与 RNG 流字符串(`RelicGenerator.cs:506`), bump 会重掷**所有**局,
+包括选项为关(行为与旧版完全一致)的局. 选项本身已通过 `GenerationSettings.Key`
+进入定义缓存键与 loc 去重键, 切换时会正确重新生成, 不需要 bump.
+`SeedVersion` 保持 `relics-v8`.
+
+### 验证
+
+- `tools/relic-probe` 新增 3 条断言, 全 PASS:
+  1. 选项**关**时死配对**必须存在**(非空性 -- 否则"规则把一切都排除了"也会通过)
+  2. 选项**开**时死配对**为 0**(200 种子 x 全部遗物 x 全部效果)
+  3. `combat_end`/`combat_victory` **触发本身仍可达**(规则剪的是配对, 不是触发;
+     若某触发被剪到无合法效果, 遗物会变成"有触发无效果"的畸形)
+- **判别力验证**: 把规则 9 的判据替换为 `&& false` 后重建, 断言 2 立即 FAIL 并报出
+  `combat_end x gain_block/immediate/self | combat_victory x gain_block/immediate/self |
+  combat_end x apply_power/strength/self | combat_victory x apply_power/thorns/self`.
+  证明断言真的在测这条规则.
+- `tools/relic-eligibility-probe`(独立 oracle, 直接编译纯源码层)的 `PolicyExcluded`
+  加入规则 9, 读的是**同一批集合**(`EffectFragment.CombatScopedOpcodes` +
+  触发名字面量)而非重新抄一份 opcode 列表, 避免 oracle 与实现漂移. PROBE OK,
+  含"每个触发词条仍 >= 1 合法触发"的可达性断言.
+- **实机**: 见 DEVLOG 条目.

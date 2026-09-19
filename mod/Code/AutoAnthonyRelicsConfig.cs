@@ -103,6 +103,35 @@ internal class AutoAnthonyRelicsConfig : SimpleModConfig
     public static bool DisableNegativeEffects { get; set; } = false;
 
     /// <summary>
+    /// When on, no relic may carry an effect that CANNOT WORK where its trigger
+    /// fires (user order 2026-09-19: "使遗物效果不会无效"). Example measured in
+    /// the shipped data: "at the end of each combat, gain 14 Block" - the combat
+    /// is over and block is cleared with it, so the relic does nothing.
+    ///
+    /// The cases the user named are each handled by a specific rule:
+    /// - "at combat end, debuff/damage the ENEMIES" and "outside combat, give
+    ///   energy/buffs/debuffs" are ALREADY excluded unconditionally by
+    ///   RelicGenerator.Excluded rule 4 (no-combat-context triggers, and
+    ///   enemy-targeted effects after every enemy is dead). Rule 4 is not
+    ///   optional because those are pure dead text.
+    /// - The remaining hole is a combat-scoped effect on a trigger that fires
+    ///   AFTER the combat has ended (combat_end / combat_victory) with a SELF
+    ///   target - gain Block, gain Energy, draw cards, apply a Power to
+    ///   yourself. Measured at 638 such pairs across 200 seeds (~3 dead relics
+    ///   per run). That is what this option adds, as Excluded rule 9.
+    ///
+    /// ON by default, unlike the other content-removing options: a dead effect
+    /// is a bug, not content a player might want, so the guarantee holds unless
+    /// it is deliberately switched off. Tier-1 MP determinism key.
+    ///
+    /// NAME CHECK (see EnableExtraEffectPool's note): must not appear in
+    /// QuriousCraftingRelics' KnownLegacyScalarKeys or its Cost_/Refund_/Min_/
+    /// Max_ prefixes, or its config migration could claim this mod's file. It
+    /// does not.
+    /// </summary>
+    public static bool DisableIneffectiveEffects { get; set; } = true;
+
+    /// <summary>
     /// Relative sampling weight of the CORE triggered fragments (the default
     /// pool: damage / block / energy / draw / powers / downsides). Only the
     /// ratio between the weights matters; 100 is the neutral value that

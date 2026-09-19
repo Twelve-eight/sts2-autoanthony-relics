@@ -45,7 +45,8 @@ internal readonly struct GenerationSettings
         int weightPassiveCore,
         int weightBenefitCore,
         int weightExtra,
-        bool disableNegativeEffects = false)
+        bool disableNegativeEffects = false,
+        bool disableIneffectiveEffects = false)
     {
         IncludeExtraPool = includeExtraPool;
         WeightTriggeredCore = Clamp(weightTriggeredCore);
@@ -53,6 +54,7 @@ internal readonly struct GenerationSettings
         WeightBenefitCore = Clamp(weightBenefitCore);
         WeightExtra = Clamp(weightExtra);
         DisableNegativeEffects = disableNegativeEffects;
+        DisableIneffectiveEffects = disableIneffectiveEffects;
     }
 
     /// <summary>
@@ -74,6 +76,18 @@ internal readonly struct GenerationSettings
     /// </summary>
     internal bool DisableNegativeEffects { get; }
 
+    /// <summary>
+    /// When on, no relic may carry an effect that CANNOT WORK where its trigger
+    /// fires (user order 2026-09-19) - e.g. "at the end of each combat, gain 14
+    /// Block" (the combat is over and block is cleared) or "gain 1 Energy"
+    /// there (there is no turn left). See EffectFragment.CombatScopedOpcodes and
+    /// RelicGenerator.Excluded rule 9 for the exact set.
+    ///
+    /// Off by default, like the other content-removing options. Tier-1 MP
+    /// determinism key - both ends must match.
+    /// </summary>
+    internal bool DisableIneffectiveEffects { get; }
+
     internal int WeightTriggeredCore { get; }
     internal int WeightPassiveCore { get; }
     internal int WeightBenefitCore { get; }
@@ -83,12 +97,18 @@ internal readonly struct GenerationSettings
     /// Values used when nothing has bound the settings page: the shipped
     /// defaults. Kept here (not read from AutoAnthonyRelicsConfig) so this type
     /// carries NO BaseLib dependency - see <see cref="ConfigSource"/>.
+    ///
+    /// MUST track AutoAnthonyRelicsConfig's initializers: this is what the
+    /// offline probes model (they leave ConfigSource unbound), so a drift here
+    /// would make them measure a configuration no player ever gets. Note
+    /// DisableIneffectiveEffects is TRUE - it ships ON (a dead effect is a bug,
+    /// not content).
     /// </summary>
     internal static readonly GenerationSettings Default = new(
         includeExtraPool: false,
         weightTriggeredCore: 100, weightPassiveCore: 100,
         weightBenefitCore: 100, weightExtra: 100,
-        disableNegativeEffects: false);
+        disableNegativeEffects: false, disableIneffectiveEffects: true);
 
     /// <summary>
     /// Supplies the live settings-page values. Bound by the mod at startup
@@ -140,6 +160,7 @@ internal readonly struct GenerationSettings
             // is reflection-based, and this runs on every definition lookup.
             if (live.IncludeExtraPool == current.IncludeExtraPool
                 && live.DisableNegativeEffects == current.DisableNegativeEffects
+                && live.DisableIneffectiveEffects == current.DisableIneffectiveEffects
                 && live.WeightTriggeredCore == current.WeightTriggeredCore
                 && live.WeightPassiveCore == current.WeightPassiveCore
                 && live.WeightBenefitCore == current.WeightBenefitCore
@@ -179,10 +200,11 @@ internal readonly struct GenerationSettings
     /// </summary>
     internal static void FreezeExplicit(bool includeExtraPool, int weightTriggeredCore,
         int weightPassiveCore, int weightBenefitCore, int weightExtra,
-        bool disableNegativeEffects = false)
+        bool disableNegativeEffects = false, bool disableIneffectiveEffects = false)
     {
         _frozen = new GenerationSettings(includeExtraPool, weightTriggeredCore,
-            weightPassiveCore, weightBenefitCore, weightExtra, disableNegativeEffects);
+            weightPassiveCore, weightBenefitCore, weightExtra, disableNegativeEffects,
+            disableIneffectiveEffects);
         _hasFrozen = true;
     }
 
@@ -200,6 +222,7 @@ internal readonly struct GenerationSettings
         {
             long key = IncludeExtraPool ? 1L : 0L;
             key = (key << 1) | (DisableNegativeEffects ? 1L : 0L);
+            key = (key << 1) | (DisableIneffectiveEffects ? 1L : 0L);
             key = (key << WeightBits) | (uint)WeightTriggeredCore;
             key = (key << WeightBits) | (uint)WeightPassiveCore;
             key = (key << WeightBits) | (uint)WeightBenefitCore;
