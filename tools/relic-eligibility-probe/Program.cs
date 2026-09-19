@@ -553,14 +553,16 @@ internal static class Program
         //
         // The BENEFIT band tracks its nominal rate closely, so it is asserted
         // against it. The PASSIVE band does NOT, and the assertion that used to
-        // demand 15% +- 3 was simply wrong (it failed at HEAD, before this
-        // change - measured 10.97% on f1c34cc, 11.23% here). Reason, verified
-        // from the pool: of the 8 passive fragments, 6 are restrictions, leaving
-        // only TWO plain passives. A 60-slot run expects ~9 passive-band slots
-        // but can only fill ~8 shapes before both plain passives are consumed,
-        // and the restriction branch fires only 30% of the time - so the slot
-        // falls through to the triggered path and the EFFECTIVE rate is
-        // structurally below nominal.
+        // demand 15% +- 3 was simply wrong (it failed at HEAD, before that
+        // change - measured 10.97% on f1c34cc). Reason, verified from the pool:
+        // of the 8 passive fragments, 6 are restrictions, leaving only TWO plain
+        // passives. A 60-slot run expects ~9 passive-band slots but can only fill
+        // ~8 shapes before they are consumed, and the restriction branch fires
+        // only 30% of the time - so the slot falls through to the triggered path
+        // and the EFFECTIVE rate is structurally below nominal. Measured 6.04%
+        // once the exhaustion re-serve was removed (2026-09-19); it was ~11%
+        // while that re-serve existed, because re-serving let the band keep
+        // filling slots with fragments it had already used.
         //
         // So the honest invariants are: the effective rate can never EXCEED the
         // nominal one (exhaustion only removes slots), and it must stay high
@@ -579,8 +581,20 @@ internal static class Program
         Check(100.0 * passiveSlots / totalSlots <= 15.0 + 0.5,
             "measured passive band never exceeds its nominal 15%",
             $"{100.0 * passiveSlots / totalSlots:F2}%");
-        Check(100.0 * passiveSlots / totalSlots >= 8.0,
-            "measured passive band stays populated (>= 8%)",
+        // The floor exists to catch a regression that EMPTIES the band (e.g. a
+        // new rule that excludes every passive), not to pin the rate at its
+        // nominal value. It was 8% while the band re-served already-used
+        // fragments; that re-serve was itself the defect fixed on 2026-09-19
+        // (it made every run draw the whole pool, so two descriptions appeared in
+        // 8 of 8 seeds). Without it the band is limited by CONTENT: 8 passive
+        // fragments exist, only 2 of them are plain (the other 6 are
+        // restrictions, gated behind RestrictionRelicChancePercent = 30%), and
+        // each fragment may be used once per run - so ~2 plain + ~2-3 restriction
+        // slots per 60 is the structural ceiling, measured at 6.04%. The honest
+        // lower bound is therefore well below the nominal 15%; 5% still fails
+        // loudly if the band ever goes dark.
+        Check(100.0 * passiveSlots / totalSlots >= 5.0,
+            "measured passive band stays populated (>= 5%, content-limited)",
             $"{100.0 * passiveSlots / totalSlots:F2}%");
 
         // ---- 7. Determinism is untouched by the new rules.

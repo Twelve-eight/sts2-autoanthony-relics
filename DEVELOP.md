@@ -676,3 +676,54 @@ combat_victory     x gain_max_potion/immediate
   turn_start x gain_max_potion/immediate | ...`. 已还原.
 - `relic-eligibility-probe`: 规则 10 进 `LegacyExcluded`(与规则 2 同段, 因为二者都是
   无条件的策略而非开关驱动的策略). PROBE OK, 含可达性断言.
+
+
+## 被动档耗尽不再重发牌 (2026-09-19, v9 顺带修复)
+
+### 怎么发现的
+
+规则 10 需要 bump `SeedVersion`(v8 -> v9),因为它是**无条件**规则、改变默认产出.
+bump 后 `relic-probe` 的**跨种子多样性**断言立即失败:
+
+```
+FAIL  variety: no relic description is present in every seed
+      2 constant: Take an extra turn if you play no cards. | Draw 2 fewer cards on turn 1 of each combat.
+```
+
+### 判定:不是我引入的,是 v9 位移暴露的既有缺陷
+
+用两个对照实验分离因果:
+
+1. **只把 `SeedVersion` 改回 v8**(保留规则 10)-> `variety` 全部 PASS.
+2. **保持 v9,把规则 10 短路为 `false`** -> `variety` **仍然 FAIL**,同样两条描述.
+
+实验 2 是关键:规则 10 关掉后仍然失败,证明**与规则 10 无关**.真相是 v8 的 RNG 流恰好
+避开了这个饱和点,v9 的流把它撞了出来 -- 与 v7 修的限制类饱和是**同一类缺陷**.
+
+### 根因
+
+`PickPassives` 在池耗尽时有 `?? PickEligiblePassive(...)` 兜底,而 `PickEligiblePassive`
+**忽略 `usedPassives`**,直接重发一个已用过的片段.后果:
+
+| 量 | 值 |
+|---|---|
+| 被动池片段数 | 13(8 普通 + 5 增益) |
+| 每局进入被动档的次数 | 7 - 13(实测) |
+| 结果 | 每局都把整个池抽完 |
+
+于是两个最先被抽到的片段(`extra_turn`、`modify_hand_draw -2`)**8/8 个种子都出现**,
+另有 5 条出现 6-7/8 次.玩家每局都会看到同样的那几件被动遗物 -- 正是 v7 修复的那类问题.
+
+### 修法
+
+删掉兜底的重发牌,池耗尽时该档位**下落为触发型遗物**(与增益档已有的"没剩的就落到
+下一档"完全同形).**唯一例外**:当 `WeightTriggeredCore <= 0`(玩家把触发档关掉了)时
+才重发被动 -- 因为"权重 0 关闭该档"是**对玩家的承诺**(工坊说明与探针都这么写),
+此时重发一件重复遗物是两者中较轻的那个恶.
+
+### 连带修正的探针阈值
+
+`relic-eligibility-probe` 的被动档下限(8%)是按**旧的**重发牌行为校准的.修复后被
+动档诚实地降到 **6.04%**,因为该档现在受**内容容量**限制:8 个被动片段里只有 2 个是
+普通被动(其余 6 个是限制类,受 30% 概率门),且每局每个片段最多用一次.
+下限改为 5%,并写明它测的是"该档不会变空",不是"钉住名义 15%".

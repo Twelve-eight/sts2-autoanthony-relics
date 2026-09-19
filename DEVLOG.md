@@ -1737,3 +1737,58 @@ turn_start_early x gain_max_potion | turn_start x gain_max_potion | combat_victo
 上一条报告写"要恢复出厂默认就把两个开关都关掉" -- **错误**. 出厂默认是
 `DisableNegativeEffects=false` 但 `DisableIneffectiveEffects=**true**`. 正确说法是:
 负面效果开关关掉, 避免无效效果开关**保持开启**.
+
+
+## WS-0919-08 被动档耗尽不再重发牌 + SeedVersion v9 + 全 mod 标注测试中
+
+### SeedVersion v8 -> v9
+
+规则 10 是**无条件**的,所以**改变默认产出**,必须 bump. 判据在 v8 注释里已写明:
+v8 不为选项 6/8/9 bump,理由是那些选项在**默认配置下恒假**(bump 属无谓重掷);
+规则 10 恒真,该理由不成立. 先例: v3(`gain_max_hp` 钉在 `obtained`)与 v4 都是
+同形改动并 bump 了.
+
+**顺带核实了一个事实**: 生成的定义**不落盘** -- `AnthonyRelicRunRegistry` 是进程内
+`Dictionary` + `Queue`,由 `ResetForRunEnd` 清空,无任何序列化. 所以 bump 不是为了
+清掉磁盘上的旧数据,而是因为 `SeedVersion` 参与 RNG 流字符串,同种子的 v8 与 v9 是
+两次不同的抽取.
+
+### v9 位移暴露了既有的被动档饱和缺陷 (真实缺陷)
+
+bump 后 `relic-probe` 的跨种子多样性断言失败: 2 条描述在 8/8 个种子中恒定
+(`extra_turn`, `modify_hand_draw -2`).
+
+**两个对照实验分离因果**:
+1. `SeedVersion` 改回 v8(保留规则 10) -> 全部 PASS
+2. 保持 v9、规则 10 短路为 `false` -> **仍然 FAIL**,同样两条
+
+实验 2 证明与规则 10 无关. 根因: `PickPassives` 的 `?? PickEligiblePassive(...)` 兜底
+**忽略 `usedPassives`**,重发已用片段;而被动池只有 13 个片段、每局进入被动档 7-13 次,
+于是每局都把整池抽完. 与 v7 的限制类饱和同类.
+
+**修法**: 删掉重发牌,池耗尽时下落为触发型遗物(与增益档同形). **例外**: 仅当
+`WeightTriggeredCore <= 0` 时才重发 -- 因为"权重 0 关闭该档"是对玩家的承诺
+(工坊说明 + 探针都这么写),此时重复遗物是较轻的恶.
+
+### 连带修正
+
+`relic-eligibility-probe` 被动档下限 8% -> 5%: 修复后被动档诚实地降到 6.04%
+(受内容容量限制: 8 个被动片段里只有 2 个普通被动,其余是受 30% 概率门的限制类,
+每局每片段最多一次). 已写明该下限测的是"该档不会变空"而非"钉住名义 15%".
+
+### 全 mod 标题与介绍标注"测试中"
+
+用户指令: 在所有**玩法** mod 的介绍和标题中加"测试中". 判定依据是各 mod manifest 的
+`affects_gameplay`:
+
+| 标注 | mod |
+|---|---|
+| 是 | AAR, Qurious, Spire1, MpConfigSync, Perfect, HeartShake, ChaosBridge |
+| 否 | FastBoot(`affects_gameplay: false`,纯启动加速) |
+
+- 标题: 追加 ` [测试中]`
+- 介绍: 在 `[h1]` 标题块之后插入一行中英双语横幅
+
+**踩坑**: VDF 值里用**真实换行**(合法),而我第一版序列化器把它转义成 `\n`,导致
+7 个文件全部 round-trip 不一致;改用最小侵入的单行正则替换(只动 title)与
+`[h1]` 后插入(只动 description),未触碰其余字节.

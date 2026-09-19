@@ -4,8 +4,11 @@
 	"contentfolder"		"G:\\omp works\\Sts\\sts2-autoanthony-relics\\workshop\\content"
 	"previewfile"		"G:\\omp works\\Sts\\sts2-autoanthony-relics\\workshop\\preview.png"
 	"visibility"		"0"
-	"title"		"Anthony Algorithm - Relics (东尼算法 - 遗物)"
+	"title"		"Anthony Algorithm - Relics (东尼算法 - 遗物) [测试中]"
 	"description"		"[h1]东尼算法 - 遗物 / Anthony Algorithm - Relics[/h1]
+
+[b]测试中[/b] -- 本模组仍在测试中, 内容与数值可能随版本调整, 欢迎反馈问题.
+[i]WORK IN PROGRESS - still being tested; content and numbers may change between versions.[/i]
 
 每局游戏,用东尼算法从本局种子确定性地生成 60 件遗物,并替换本局全部的遗物掉落.
 与原版东尼算法相同的核心机制:[b]触发与效果是独立片段,生成时随机重组[/b] ——

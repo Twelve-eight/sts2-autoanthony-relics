@@ -195,8 +195,21 @@ public static class RelicGenerator
     /// now configurable and must reach the definition cache key; (c) the extra
     /// pool is gated per run. Same reason as v6->v7: a v7 save must regenerate
     /// rather than be served relics whose names came from the old source set.
+    /// v9: gold and potion slots are granted only on the `obtained` trigger
+    /// (rule 10, user order 2026-09-19). Bumped, unlike the v8-era OPTIONS
+    /// (rules 6/8/9): those are always-false conditions under the shipped
+    /// defaults, so bumping would have re-rolled every run for no behavioural
+    /// change. Rule 10 is unconditional and therefore DOES change the default
+    /// output - a v8 set can contain relics that pay out gold or a potion slot
+    /// every turn, which this rule forbids. Same shape as v3 (which pinned
+    /// gain_max_hp to `obtained` and bumped for exactly this reason) and v4.
+    ///
+    /// Note the definitions are NOT persisted (AnthonyRelicRunRegistry is an
+    /// in-process LRU that ResetForRunEnd clears), so this is not about stale
+    /// on-disk data - it is about the RNG stream string below carrying the
+    /// version, so a v8 and a v9 run with the same seed are different draws.
     /// </summary>
-    public const string SeedVersion = "relics-v8";
+    public const string SeedVersion = "relics-v9";
 
     /// <summary>Chance a slot samples a second effect (both bound to the trigger).</summary>
     private const int TwoEffectChancePercent = 30;
@@ -695,8 +708,7 @@ public static class RelicGenerator
             EffectFragment? benefit = PickWeightedUniquely(random, pool.BenefitEffects,
                 e => usedPassives.Add(e.ShapeKey),
                 e => !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e),
-                WeightOf)
-                ?? PickEligiblePassive(random, pool.BenefitEffects);
+                WeightOf);
             if (benefit is not null)
             {
                 usedPassives.Add(benefit.ShapeKey);
@@ -768,15 +780,39 @@ public static class RelicGenerator
         // emit a bare restriction with no offset.
         //
         // These two draws go through the WEIGHTED picker (user order 2026-09-18:
-        // one weight per pool). Note this is only the fallback: when every
-        // eligible passive is already used, PickEligiblePassive re-serves one
-        // uniformly and deliberately ignores weights, so WeightPassiveCore does
-        // not govern the exhausted case.
+        // one weight per pool). When every eligible passive is already used this
+        // returns null and the slot FALLS THROUGH to the triggered path, exactly
+        // like the benefit band above.
+        //
+        // It deliberately does NOT re-serve an already-used fragment (which is
+        // what PickEligiblePassive used to do here). Re-serving made the passive
+        // band draw the ENTIRE pool every run: there are 8 plain passives and a
+        // run reaches the band ~10-13 times, so every seed ended up containing
+        // every passive, and the two fragments that entered first (extra_turn,
+        // modify_hand_draw -2) appeared in 8 of 8 sampled real seeds - the same
+        // class of defect as the v7 restriction saturation, which the
+        // cross-seed variety assertion caught here. Letting the slot become a
+        // triggered relic instead keeps the passive band a seed-dependent
+        // SUBSET.
         EffectFragment? passive = PickWeightedUniquely(random, pool.PassiveEffects,
             e => usedPassives.Add(e.ShapeKey),
             e => !e.IsRestriction && !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e),
-            WeightOf)
-            ?? PickEligiblePassive(random, pool.PassiveEffects.Where(e => !e.IsRestriction).ToList());
+            WeightOf);
+        if (passive is null)
+        {
+            // The pool is exhausted. Normally the slot falls through to the
+            // triggered path (see above), but ONLY if the player has left that
+            // band switched on: WeightTriggeredCore = 0 means "no triggered
+            // relics", and a zero weight must genuinely empty its band (the
+            // probe asserts it, and the Workshop page documents it). In that one
+            // case re-serve an already-used passive - a repeated relic is the
+            // lesser evil, and it is exactly what this branch did unconditionally
+            // before, which is what made every run draw the whole pool.
+            if (GenerationSettings.Current.WeightTriggeredCore <= 0)
+            {
+                passive = PickEligiblePassive(random, pool.PassiveEffects.Where(e => !e.IsRestriction).ToList());
+            }
+        }
         if (passive is not null)
         {
             usedPassives.Add(passive.ShapeKey);
