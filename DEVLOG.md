@@ -1692,3 +1692,48 @@ bug 一直没暴露. 已改为 `@(...).Count`. **这是既有缺陷, 非本轮�
 
 - 真实战斗中"死遗物消失"的**肉眼确认**需用户开局(后台输入对 Godot 无效).
 - **MP 两端一致性**未实测.
+
+
+## WS-0919-07 金币与药水栏位仅在拾起时 (规则 10)
+
+**用户指令**: "获得金币和药水栏位只能在拾起时, 否则强度会极高."
+
+### 先测再写
+
+枚举 200 种子 x 全部遗物, 找"触发 != `obtained` 但给金币/药水栏位"的配对, 实测存在:
+
+```
+block_cleared x gain_max_potion | combat_start x gain_gold | combat_end x gain_max_potion
+turn_start_early x gain_max_potion | turn_start x gain_max_potion | combat_victory x gain_max_potion
+```
+
+`turn_start x gain_max_potion` 即每回合一个药水栏位. 确认是真实缺陷.
+
+### 实现
+
+`RelicGenerator.Excluded` **规则 10**:
+
+```csharp
+|| ((trigger is null || trigger.Kind != "obtained")
+    && (effect.Opcode == "gain_gold" || effect.Opcode == "gain_max_potion"));
+```
+
+无条件(无开关), 与规则 2 同形. 依据: 金币/药水栏位是永久货币, 引擎自己的三个原子
+(`OldCoin`, `PotionBelt`, `PhialHolster`)源触发全部是 `obtained` -- 已查
+`mod/Code/Data/Json/relic_atoms.json` 确认.
+
+**规则 1 被包含**: 规则 1 的 `gold_gained x gain_gold` 中 `gold_gained != obtained`,
+已被规则 10 覆盖. 规则 1 保留(陈述的是递归边界这条不同不变式), 已在代码注释中写明.
+
+### 验证
+
+- `relic-probe` 2 条断言 PASS: 无非 `obtained` 的金币/药水配对; `obtained` 仍可拿到(非空性).
+- **判别力**: 规则 10 插入 `&& false` -> 断言 1 FAIL 并报出 6 种具体配对. 已还原.
+- `relic-eligibility-probe`: 规则 10 进 `LegacyExcluded`(与规则 2 同段). PROBE OK.
+- **未实机验证**(游戏已退出, 且此规则是生成期过滤, 需新开一局才能看到 60 件中的差异).
+
+### 顺带修正上一条报告的错误说法
+
+上一条报告写"要恢复出厂默认就把两个开关都关掉" -- **错误**. 出厂默认是
+`DisableNegativeEffects=false` 但 `DisableIneffectiveEffects=**true**`. 正确说法是:
+负面效果开关关掉, 避免无效效果开关**保持开启**.

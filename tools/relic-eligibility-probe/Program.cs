@@ -100,7 +100,14 @@ internal static class Program
     /// <summary>Pre-v4 rules (recursion boundary + max-HP policy).</summary>
     private static bool LegacyExcluded(string? triggerKind, EffectFragment effect) =>
         (triggerKind is not null && triggerKind == "gold_gained" && effect.Opcode == "gain_gold")
-        || (effect.Opcode == "gain_max_hp" && (triggerKind is null || triggerKind != "obtained"));
+        || (effect.Opcode == "gain_max_hp" && (triggerKind is null || triggerKind != "obtained"))
+        // Rule 10 (user order 2026-09-19): gold and potion slots are permanent
+        // currency, so they are granted only when the relic is picked up - on any
+        // repeating trigger they would pay out every time it fires. Same shape as
+        // the max-HP policy above; unconditional, so it is modelled here rather
+        // than in PolicyExcluded (which is the toggle-driven section).
+        || ((triggerKind is null || triggerKind != "obtained")
+            && (effect.Opcode == "gain_gold" || effect.Opcode == "gain_max_potion"));
 
     /// <summary>
     /// Rules 6 and 7 (user order 2026-09-18): the extra-pool toggle and the

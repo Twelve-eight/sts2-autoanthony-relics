@@ -726,6 +726,56 @@ internal static class Program
         Check(malformed.Count == 0, "negatives: every slot stays well-formed (no trigger with zero effects)",
             malformed.Count == 0 ? "none" : string.Join(",", malformed.Take(4)));
 
+        // ---- 8a8. "GAIN GOLD / POTION SLOTS ONLY WHEN PICKED UP" (user order
+        // 2026-09-19). A relic that grants gold or a potion slot on a repeating
+        // trigger (per combat, per turn, per kill) pays out every time it fires
+        // and is far stronger than the engine ever ships - OldCoin, PotionBelt
+        // and PhialHolster all grant theirs at `obtained` only. Measured before
+        // this rule: N such pairs across 200 seeds.
+        //
+        // Measured on the OBSERVABLE pair (trigger kind x opcode), not on
+        // Excluded, so the check stays meaningful if the rule is rewritten.
+        static bool GoldOrPotion(string op) =>
+            op == "gain_gold" || op == "gain_max_potion";
+        static bool GoldPotionOffTrigger(GeneratedRelicDefinition def) =>
+            def.Trigger is not null
+            && def.Trigger.Kind != "obtained"
+            && def.Effects.Any(e => GoldOrPotion(e.Opcode));
+
+        var payoutMisplaced = new List<string>();
+        for (int i = 0; i < 200; i++)
+        {
+            foreach (var def in RelicGenerator.Generate($"soak-{i}", pool))
+            {
+                if (GoldPotionOffTrigger(def))
+                {
+                    var e = def.Effects.First(x => GoldOrPotion(x.Opcode));
+                    payoutMisplaced.Add($"{def.Trigger!.Kind} x {e.Opcode}/{e.Variant}");
+                }
+            }
+        }
+        Check(payoutMisplaced.Count == 0,
+            "gold/potion: no relic grants gold or a potion slot off an `obtained` trigger",
+            payoutMisplaced.Count == 0 ? "none" : string.Join(" | ", payoutMisplaced.Distinct().Take(6)));
+
+        // Non-vacuity: `obtained` must still carry them, i.e. the rule gates the
+        // trigger rather than deleting the fragments.
+        var payoutOnObtained = new List<string>();
+        for (int i = 0; i < 200; i++)
+        {
+            foreach (var def in RelicGenerator.Generate($"soak-{i}", pool))
+            {
+                if (def.Trigger is not null && def.Trigger.Kind == "obtained"
+                    && def.Effects.Any(e => GoldOrPotion(e.Opcode)))
+                {
+                    payoutOnObtained.Add(def.Effects.First(e => GoldOrPotion(e.Opcode)).Opcode);
+                }
+            }
+        }
+        Check(payoutOnObtained.Count > 0,
+            "gold/potion: `obtained` still grants gold and potion slots (rule gates the trigger, not the fragment)",
+            $"{payoutOnObtained.Count} relics, e.g. {payoutOnObtained.FirstOrDefault()}");
+
         // ---- 8a7. "PREVENT INEFFECTIVE EFFECTS" (user order 2026-09-19).
         // A combat-scoped effect on a trigger that fires AFTER the combat ended
         // cannot do anything (block is cleared, no turn is left for energy, a

@@ -450,6 +450,8 @@ public static class RelicGenerator
     ///    it with (see RestrictionOffsets). The engine never ships a bare
     ///    restriction, and the passive slot holds ONE fragment, so the offset
     ///    is what keeps a generated restriction relic from being pure cost.
+    ///
+    /// Rules 6-10 are the options and later policies; see each clause below.
     /// </summary>
     internal static bool Excluded(TriggerFragment? trigger, EffectFragment effect) =>
         (trigger is not null
@@ -513,7 +515,33 @@ public static class RelicGenerator
         || (GenerationSettings.Current.DisableIneffectiveEffects
             && trigger is not null
             && TriggersAfterEnemiesAreDead.Contains(trigger.Kind)
-            && EffectFragment.CombatScopedOpcodes.Contains(effect.Opcode));
+            && EffectFragment.CombatScopedOpcodes.Contains(effect.Opcode))
+        // 10. "Gold and potion slots only when picked up" (user order 2026-09-19:
+        //     "获得金币和药水栏位只能在拾起时,否则强度会极高"). Unconditional, like
+        //     rule 2's max-HP policy and for the same reason: this is a balance
+        //     guarantee, not a preference, so it has no toggle.
+        //
+        //     Why it matters: gold and potion slots are PERMANENT currency, not
+        //     per-combat resources. On `obtained` the relic pays out once, which
+        //     is how the engine ships every one of them (OldCoin, PotionBelt,
+        //     PhialHolster). On a repeating trigger it pays out every time that
+        //     trigger fires - measured before this rule at, e.g., block_cleared x
+        //     gain_max_potion (a potion slot every time block is cleared) and
+        //     turn_start x gain_max_potion (one per turn) - which compounds into
+        //     far more than any shipped relic.
+        //
+        //     This is exactly rule 2's shape with a different opcode set, and it
+        //     deliberately mirrors it rather than generalising: the two policies
+        //     are separate orders with separate evidence, and the `obtained`
+        //     trigger is the only trigger the engine itself uses for either.
+        //
+        //     NOTE: for the current pool this subsumes rule 1 (gold_gained x
+        //     gain_gold), since gold_gained is not `obtained`. Rule 1 is kept
+        //     because it states a DIFFERENT invariant - the recursion boundary
+        //     (gaining gold would re-enter the gold_gained hook) - which must
+        //     survive if this balance rule is ever narrowed.
+        || ((trigger is null || trigger.Kind != "obtained")
+            && (effect.Opcode == "gain_gold" || effect.Opcode == "gain_max_potion"));
 
     public static IReadOnlyList<GeneratedRelicDefinition> Generate(string runSeed, RelicFragmentPool pool)
     {

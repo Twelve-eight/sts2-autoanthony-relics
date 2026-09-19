@@ -626,3 +626,53 @@ BigMushroom(-2, 也被本选项关掉), 即**只剩 1 个**可用的普通被动
   触发名字面量)而非重新抄一份 opcode 列表, 避免 oracle 与实现漂移. PROBE OK,
   含"每个触发词条仍 >= 1 合法触发"的可达性断言.
 - **实机**: 见 DEVLOG 条目.
+
+
+## 金币与药水栏位仅在拾起时 (2026-09-19 用户指令, 规则 10)
+
+### 用户指令
+
+> 获得金币和药水栏位只能在拾起时, 否则强度会极高.
+
+### 先测再写: 又是真实缺陷
+
+写规则前先枚举 200 个种子 x 全部遗物, 找"触发不是 `obtained` 但效果给金币/药水栏位"的配对:
+
+```
+block_cleared      x gain_max_potion/immediate
+combat_start       x gain_gold/immediate
+combat_end         x gain_max_potion/immediate
+turn_start_early   x gain_max_potion/immediate
+turn_start         x gain_max_potion/immediate
+combat_victory     x gain_max_potion/immediate
+```
+
+`turn_start x gain_max_potion` = **每回合一个药水栏位**; `block_cleared x gain_max_potion`
+= 每次格挡被清空就给一个. 这类效果远强于本体任何遗物.
+
+### 为什么必须限 `obtained`
+
+金币与药水栏位是**永久货币**, 不是每场战斗的资源. 挂在 `obtained` 上只结算一次,
+这正是引擎自己的做法: `OldCoin`(金币), `PotionBelt` / `PhialHolster`(药水栏位)
+三个原子的源触发**全部**是 `obtained` (已查 `relic_atoms.json` 确认). 挂在会重复的触发上
+则每次触发都结算, 复利式膨胀.
+
+### 规则 10 无条件, 不给开关
+
+与规则 2(`gain_max_hp` 仅 `obtained`)同形同理: 这是**平衡保证**, 不是偏好,
+所以没有开关 -- 它和规则 2 一样属于"生成策略", 不属于规则 6/8/9 那种"玩家可选的选项".
+
+**规则 1 被严格包含**: 规则 1 是 `gold_gained x gain_gold`(递归边界: 给金币会再次进入
+`gold_gained` 钩子). `gold_gained != obtained`, 所以规则 10 已覆盖它. 规则 1 **保留**,
+因为它陈述的是**另一条不变式**(递归边界), 若将来规则 10 被收窄, 规则 1 必须仍然成立.
+
+### 验证
+
+- `relic-probe` 新增 2 条断言:
+  1. 200 种子内**没有**非 `obtained` 触发携带 `gain_gold`/`gain_max_potion`
+  2. **非空性**: `obtained` **仍然**能拿到这两类效果(证明规则门的是触发而非删片段)
+- **判别力验证**: 规则 10 判据插入 `&& false` 后重建, 断言 1 立即 FAIL 并报出
+  `block_cleared x gain_max_potion/immediate | combat_start x gain_gold/immediate |
+  turn_start x gain_max_potion/immediate | ...`. 已还原.
+- `relic-eligibility-probe`: 规则 10 进 `LegacyExcluded`(与规则 2 同段, 因为二者都是
+  无条件的策略而非开关驱动的策略). PROBE OK, 含可达性断言.
