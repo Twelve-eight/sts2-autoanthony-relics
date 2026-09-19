@@ -10,54 +10,70 @@
 [b]测试中[/b] -- 内容与数值可能随版本调整.
 [i]WORK IN PROGRESS - content and numbers may change between versions.[/i]
 
-每局用本局种子确定性地生成 60 件遗物,替换本局全部遗物掉落.核心机制与原版东尼算法一致:[b]触发与效果是独立片段,生成时随机重组[/b],因此会出现原版从未有过的组合.
-[i]Each run deterministically generates 60 relics from the run seed and replaces every relic drop. Triggers and effects are independent fragments recombined at generation time, so combinations the base game never had can appear.[/i]
+每局用本局种子确定性地生成 60 件遗物,替换本局的遗物奖励掉落.核心机制与原版东尼算法一致:[b]触发与效果是独立片段,生成时随机重组[/b],因此会出现原版从未有过的组合.
+[i]Each run deterministically generates 60 relics from the run seed and replaces the run's relic reward drops. Triggers and effects are independent fragments recombined at generation time, so combinations the base game never had can appear.[/i]
 
-[h2]词条池 / Fragment pools[/h2]
+[h2]它做什么 / What it does[/h2]
 
-触发条件与效果分开采样再重组;每个词条自带数值与目标,可直接读作一句遗物文本.同一局内片段不重复使用,故每局只抽到池的一个子集.
-[i]Triggers and effects are sampled separately, then recombined. Fragments are not reused within a run, so each run draws only a subset of the pool.[/i]
+[list]
+[*][b]60 件生成遗物[/b] - 每局从种子派生,逐槽位重新生成(约 20 普通 / 21 罕见 / 19 稀有)
+[*][b]条件重组[/b] - 触发片段(回合开始 / 回合结束 / 战斗开始 / 战斗结束 / 战斗胜利 / 进入战斗 / 拾取时 / 打出能力牌 / 敌人死亡 / 获得金币 / 格挡被清空)与效果片段(力量 / 活力 / 荆棘 / 易伤 / 格挡 / 回复 / 能量 / 抽牌 / 生命上限 / 金币 / 药水栏位 / 伤害)从[b]同一个池独立采样[/b]
+[*][b]双效果遗物[/b] - 约 30% 的遗物携带两个效果,同挂一个触发
+[*][b]纯被动遗物[/b] - 少数遗物是首回合抽牌修正(正负都有)
+[*][b]中英双语描述[/b] - 每件遗物的名字与描述由片段语义实时渲染
+[*][b]确定性[/b] - 同种子 + 同设置 = 同一批遗物(逐字节一致)
+[/list]
+[i]60 relics per run; triggers and effects sampled independently from one pool, ~30% carrying two effects; names and text render per slot; the whole set is a pure function of (seed + settings).[/i]
 
 [h2]负面与限制词条 / Downside and restriction fragments[/h2]
 
-负面词条取自游戏中所有遗物的负面效果(含先古遗物):失去生命 / 生命上限 / 金币,获得诅咒,手牌虚无等.先古遗物的限制类负面也入池(不能获得金币 / 药水栏位,出牌数受限等).限制类与增益配对出现,不会是纯亏损.
-[i]Downsides come from every relic in the game, Ancient ones included: losing HP / max HP / gold, curses, hand-Ethereal. Ancient restriction affixes also enter the pool (no gold, no potion slots, capped card plays). A restriction is paired with a benefit so it is never pure cost.[/i]
+负面词条取自全游戏遗物(含不参与再生成的先古 / 事件遗物):诅咒,失去生命上限,失去金币,自伤,均匀抽取无概率加成.先古遗物的限制类负面也入池(禁金币 / 禁药水 / 每回合出牌上限 / 卡牌效果不抽牌 / 能力牌费 +1 / 敌人入场获得力量),每局只抽取其中一个随种子变化的子集,且[b]必定与引擎原本配对的增益同体出现[/b](如“禁金币”配“+1 能量”),不会生成只有代价没有收益的遗物.纯增益词条出现率限制在 5%.
+[i]Downsides come from every relic, Ancient and Event ones included, drawn uniformly. Ancient restriction affixes each appear with the benefit the engine pairs them with, so no relic costs something and grants nothing. Pure benefits are gated to 5%.[/i]
 
 [h2]数据忠实度 / Data fidelity[/h2]
 
-原子数据由本模组工具从游戏自身的遗物实现中提取,再经人工审计账本过滤.
-[i]Atoms are extracted from the game's own relic implementations and gated by a hand-audited ledger.[/i]
+原子池从游戏[b]自身的 300 个遗物类[/b]提取,并经[b]逐条人工审计账本[/b]过滤:只有六项对账(何时 / 谁 / 目标 / 数值 / 条件 / 状态)全部通过的片段进入生成池;无法核实或提取错误的条目(阈值当数值 / 正负号丢失 / 条件反转等)一律[b]拒绝[/b].已知修复示例:水银玉猫袋(全体 1 易伤),大蘑菇(首回合少抽 2 张,负号保留),弯刀(力量 1),药水腰带(2 个栏位).
+[i]Atoms come from the game's own 300 relic classes, gated by a hand-audited deny-by-default ledger.[/i]
 
 [h2]遗物替换范围 / Relic replacement[/h2]
 
-替换本局所有遗物掉落(含先古 / 商店 / 事件).若要保留原版遗物池,请勿订阅.
-[i]Replaces all relic drops (Ancient, shop, events). Do not subscribe if you want the vanilla relic pool.[/i]
+[b]只出生成遗物[/b]:战斗奖励 / 精英奖励 / 宝箱 / 商店的随机遗物 / 事件随机遗物 / 挖掘 / 营火等.
+[b]保持原版不动[/b]:
+[list]
+[*][b]先古之民(Ancient)遗物[/b] - 完全不动(其效果会被采集进词条池,但遗物本身不替换)
+[*]初始遗物 / Neow 遗物 / 事件专属固定遗物(本就不经过奖励池)
+[/list]
+[i]Generated relics replace combat, elite, chest, shop, event, dig and rest drops. Starter, Neow, event-fixed and ANCIENT relics stay vanilla - Ancient effects are harvested into the pool, but the relics themselves are never replaced.[/i]
 
 [h2]游戏内设置 / In-game settings[/h2]
 
+设置 -> 模组设置(专属设置页):
 [list]
+[*][b]Enabled(总开关)[/b](默认开)- 关闭后生成遗物停用,奖励池恢复原版
+[*][b]ReplaceVanillaRelics(替换原版遗物)[/b](默认开)- 关闭后生成遗物与原版遗物[b]混合掉落[/b]
 [*][b]额外词条池[/b](默认关):遗物还可能获得从 [b]怪异炼化 - 遗物[/b] 搬来的卡牌级效果 -- 手牌获得保留 / 奇巧 / 虚无,或附上锋利 / 灵巧 / 注能
 [*][b]四个生成权重[/b](触发 / 被动 / 增益 / 额外,默认均 100):决定各档的[b]抽取比例[/b],只有相互比例有意义;设为 0 即关闭该档.100/100/100/100 名义为 80/15/5;因被动与增益档片段少(8 与 5 个,每局每片段最多一次)且耗尽后落档,[b]实测[/b]约 89/6/5
 [*][b]关闭所有负面效果[/b](默认关):遗物不再带任何负面 -- 不失去生命 / 生命上限 / 金币,不获诅咒,手牌不虚无,也无先古限制类词条.注意:[b]回合结束不自动弃手牌[/b] 不算负面
-[*][b]金币与药水栏位仅在拾起时[/b](固定,无开关):这类效果只挂在“拾起时”触发上 -- 它们是永久货币,挂重复触发会复利式膨胀
-[*][b]避免无效效果[/b](默认[b]开[/b]):遗物不会再抽到“在其触发时机无法生效”的效果(如“战斗结束时获得格挡”).另有[b]两类恒不生成[/b]:战斗结束时对敌方的效果,以及非战斗状态下需要战斗的效果
+[*][b]金币与药水栏位仅在拾起时[/b](固定,无开关):这类效果只挂“拾起时”触发 -- 它们是永久货币,挂重复触发会复利式膨胀
+[*][b]避免无效效果[/b](默认[b]开[/b]):不再抽到“在其触发时机无法生效”的效果(如“战斗结束时获得格挡”).另有[b]两类恒不生成[/b]:战斗结束时对敌方的效果,以及非战斗状态下需要战斗的效果
+[*]其他 BaseLib 遗物模组的自定义遗物自动保留,无需单独开关
 [/list]
-[i]Extra pool (off): adds card-level effects ported from Qurious Crafting. Four weights set each band's ROLL (ratio only); 0 disables a band. 100/100/100/100 rolls 80/15/5 nominally and ~89/6/5 measured, because the small passive/benefit pools exhaust. “Disable all negative effects” (off) removes every downside. Gold and potion slots are granted on pickup only - they are permanent currency. “Prevent ineffective effects” (ON) drops effects that cannot work where they fire.[/i]
+[i]Enabled (on): master switch; off restores the vanilla pool. ReplaceVanillaRelics (on): off mixes generated relics with vanilla. Extra pool (off): card-level effects from Qurious Crafting. Four weights set each band's ROLL (ratio only; 0 disables a band): 100/100/100/100 rolls 80/15/5 nominally, ~89/6/5 measured, as the small pools exhaust. Disable all negative effects (off). Gold and potion slots on pickup only. Prevent ineffective effects (ON). Other BaseLib mods' relics always kept.[/i]
 
 [h2]多人联机 / Multiplayer[/h2]
 
-遗物定义是 (种子 + 生成设置) 的纯函数:同种子 + 同设置则两端生成同一批遗物.上述开关与权重都[b]参与生成[/b],联机两端必须取值相同.
-[i]Definitions are a pure function of (seed + settings), so both ends regenerate identical relics. The toggles and weights are generation inputs: every player must use the same values.[/i]
+遗物定义是 (种子 + 生成设置) 的纯函数:同种子 + 同设置则两端生成同一批遗物.生成开关与权重都[b]参与生成[/b],联机两端必须取值相同.总开关与替换范围只影响本机掉落池.
+[i]Definitions are a pure function of (seed + settings), so both ends regenerate identical relics. The generation toggles and weights are generation inputs: every player must use the same values. The master switch and replace-vanilla toggle only affect the local drop pool.[/i]
 
 [h2]与 怪异炼化 - 遗物 共存 / Coexistence[/h2]
 
-可与 [b]怪异炼化 - 遗物[/b] 同时安装,两者的遗物池互不干扰.
-[i]Can be installed alongside Qurious Crafting - Relics; the pools do not interfere.[/i]
+可与 [b]怪异炼化 - 遗物[/b] 同装:本模组保留 BaseLib 自定义遗物,但 Qurious 的池只保留其自身混沌遗物,双装时掉落以 Qurious 为主,请以实测为准.
+[i]Can be installed alongside Qurious Crafting - Relics; Qurious's pool keeps only its own chaos relics, so with both installed drops skew toward it.[/i]
 
 [h2]署名与数据来源 / Attribution[/h2]
 
-机制思想来自 [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3786611028]Alriph 的 Auto-Anthonyology(东尼算法)[/url];本 mod 与其相互独立,不依赖也不重复其数据.生成器与渲染为本仓库独立实现.
-[i]Mechanic idea from Alriph's Auto-Anthonyology; this mod is independent of it. Generators and rendering are implemented in this repository.[/i]
+机制思想来自 [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3786611028]Alriph 的 Auto-Anthonyology(东尼算法)[/url];本 mod 与其相互独立,不依赖也不重复其数据.原子数据由本模组工具从游戏自身遗物实现中提取并经人工审计账本过滤;生成器与渲染为本仓库独立实现.
+[i]Mechanic idea from Alriph's Auto-Anthonyology; this mod is independent of it. Generators and rendering are implemented here.[/i]
 
 [h2]前置依赖 / Requirements[/h2]
 
