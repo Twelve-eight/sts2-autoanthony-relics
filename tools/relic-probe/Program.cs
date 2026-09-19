@@ -999,7 +999,13 @@ internal static class Program
         // "common by design"; 200 seeds can, and the margin is wide (measured max
         // 60.5%, nothing at or above 95%).
         const int WideSeeds = 200;
-        const double NearUniversal = 0.95;
+        // Bound set from the MEASURED healthy distribution, not from just below
+        // the defect. Healthy peak is 60.5%; the defect it must catch sat at
+        // 96-98%. A threshold of 95% would leave only one point of margin, so a
+        // milder regression - or a different version bump shifting the RNG
+        // stream - could land at 94% and pass silently. 80% keeps ~20 points of
+        // clearance on BOTH sides.
+        const double NearUniversal = 0.80;
         var descriptionHits = new Dictionary<string, int>(StringComparer.Ordinal);
         var nameHits = new Dictionary<string, int>(StringComparer.Ordinal);
         for (int i = 0; i < WideSeeds; i++)
