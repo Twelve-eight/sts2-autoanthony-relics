@@ -530,6 +530,40 @@ internal static class Program
         CheckBandWeight("benefit", baseBenefit, basePassive, baseTriggered, pool,
             () => GenerationSettingsTest.Set(weightBenefit: 0), band: 0);
 
+        // COMBINATIONS of zero weights. The one-at-a-time checks above each
+        // leave the OTHER bands available, so they cannot see a slot that is
+        // refused by its own band and then falls through into a band the player
+        // disabled. That hole was real: with benefit on and passive AND
+        // triggered both at 0, the benefit band exhausted after ~5 slots and the
+        // remaining ~55 became triggered relics - emitting exactly the band the
+        // player had switched off. Each pair below must still produce zero slots
+        // from the two disabled bands.
+        foreach ((string label, Action set, int offA, int offB) pair in new (string, Action, int, int)[]
+                 {
+                     ("passive+benefit", () => GenerationSettingsTest.Set(
+                         weightTriggered: 100, weightPassive: 0, weightBenefit: 0), 0, 1),
+                     ("triggered+passive", () => GenerationSettingsTest.Set(
+                         weightTriggered: 0, weightPassive: 0, weightBenefit: 100), 2, 1),
+                     ("triggered+benefit", () => GenerationSettingsTest.Set(
+                         weightTriggered: 0, weightPassive: 100, weightBenefit: 0), 2, 0),
+                 })
+        {
+            int cb, cp, ct;
+            pair.set();
+            try
+            {
+                (cb, cp, ct) = CountBands(pool, 80);
+            }
+            finally
+            {
+                GenerationSettingsTest.Reset();
+            }
+            int[] v = { cb, cp, ct };
+            Check(v[pair.offA] == 0 && v[pair.offB] == 0,
+                $"weight: '{pair.label}' both = 0 keeps BOTH bands empty",
+                $"benefit/passive/triggered = {cb}/{cp}/{ct}");
+        }
+
         // A NONZERO weight must keep its band reachable, however lopsided the
         // ratio. Integer threshold division truncates, so before the clamp a
         // slider at its lowest nonzero step (10, the slider granularity) against
@@ -948,29 +982,56 @@ internal static class Program
             restrictionCounts.Add(defs.Count(d => d.Effects.Any(e => e.IsRestriction)));
         }
 
-        // (a) No description may appear in EVERY run. The v6 defect had 7 such
-        // descriptions (all six restriction texts plus the -2 draw passive).
-        var constantDescriptions = new HashSet<string>(perSeedDescriptions[0]);
-        foreach (var s in perSeedDescriptions.Skip(1))
+        // (a) No description may be NEAR-UNIVERSAL across runs. The v6 defect
+        // had 7 descriptions in EVERY run (all six restriction texts plus the
+        // -2 draw passive), which is what the players saw.
+        //
+        // Measured over WIDE_SEEDS, NOT the 8 real seeds. The 8-seed form this
+        // replaced intersected eight sets and demanded the result be empty, and
+        // that is a coin flip rather than a test: the pools are small (8 passive
+        // + 5 benefit fragments), so each description legitimately appears in
+        // ~55-60% of runs, and P(a given one appears in all 8) is ~0.57^8 = 0.9%.
+        // Across ~60 descriptions that is ~0.5 expected hits, so the assertion
+        // passed or failed on luck. Observed exactly that: it was green on v8 and
+        // red on v9 while the generator's behaviour was UNCHANGED (verified by
+        // disabling rule 10 under v9 - still red, with the same two entries).
+        // A small sample cannot distinguish "constant by construction" from
+        // "common by design"; 200 seeds can, and the margin is wide (measured max
+        // 60.5%, nothing at or above 95%).
+        const int WideSeeds = 200;
+        const double NearUniversal = 0.95;
+        var descriptionHits = new Dictionary<string, int>(StringComparer.Ordinal);
+        var nameHits = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < WideSeeds; i++)
         {
-            constantDescriptions.IntersectWith(s);
+            var defs = RelicGenerator.Generate($"variety-wide-{i}", pool);
+            foreach (string x in defs.Select(d => d.DescriptionEn).Distinct(StringComparer.Ordinal))
+            {
+                descriptionHits[x] = descriptionHits.GetValueOrDefault(x) + 1;
+            }
+            foreach (string x in defs.Select(d => d.NameEn).Distinct(StringComparer.Ordinal))
+            {
+                nameHits[x] = nameHits.GetValueOrDefault(x) + 1;
+            }
         }
-        Check(constantDescriptions.Count == 0,
-            "variety: no relic description is present in every seed",
-            constantDescriptions.Count == 0
-                ? "0 of 60"
-                : $"{constantDescriptions.Count} constant: {string.Join(" | ", constantDescriptions.Take(3))}");
+        var universalDescriptions = descriptionHits.Where(kv => kv.Value >= NearUniversal * WideSeeds).ToList();
+        int descriptionPeak = descriptionHits.Count == 0 ? 0 : descriptionHits.Values.Max();
+        Check(universalDescriptions.Count == 0,
+            $"variety: no relic description is near-universal (>= {NearUniversal:P0} of {WideSeeds} seeds)",
+            universalDescriptions.Count == 0
+                ? $"0 of {descriptionHits.Count} distinct; peak {descriptionPeak}/{WideSeeds} ({100.0 * descriptionPeak / WideSeeds:F1}%)"
+                : $"{universalDescriptions.Count} near-universal: "
+                  + string.Join(" | ", universalDescriptions.Take(3).Select(kv => $"{kv.Value}/{WideSeeds} {kv.Key}")));
 
         // Names too: a description-level fix that left naming invariant would
         // still show the player the same relic names every run.
-        var constantNames = new HashSet<string>(perSeedNames[0]);
-        foreach (var s in perSeedNames.Skip(1))
-        {
-            constantNames.IntersectWith(s);
-        }
-        Check(constantNames.Count == 0,
-            "variety: no relic name is present in every seed",
-            constantNames.Count == 0 ? "0 of 60" : $"{constantNames.Count}: {string.Join(" | ", constantNames.Take(3))}");
+        var universalNames = nameHits.Where(kv => kv.Value >= NearUniversal * WideSeeds).ToList();
+        int namePeak = nameHits.Count == 0 ? 0 : nameHits.Values.Max();
+        Check(universalNames.Count == 0,
+            $"variety: no relic name is near-universal (>= {NearUniversal:P0} of {WideSeeds} seeds)",
+            universalNames.Count == 0
+                ? $"0 of {nameHits.Count} distinct; peak {namePeak}/{WideSeeds} ({100.0 * namePeak / WideSeeds:F1}%)"
+                : $"{universalNames.Count}: " + string.Join(" | ", universalNames.Take(3).Select(kv => $"{kv.Value}/{WideSeeds} {kv.Key}")));
 
         // (b) A run must not take EVERY restriction fragment. v6 took the branch
         // whenever any remained, so the count equalled the pool size in 67 of 68

@@ -1739,56 +1739,64 @@ turn_start_early x gain_max_potion | turn_start x gain_max_potion | combat_victo
 负面效果开关关掉, 避免无效效果开关**保持开启**.
 
 
-## WS-0919-08 被动档耗尽不再重发牌 + SeedVersion v9 + 全 mod 标注测试中
+## WS-0919-08 被动/增益档耗尽不再重发牌 + SeedVersion v9 + 全 mod 标注测试中
 
 ### SeedVersion v8 -> v9
 
-规则 10 是**无条件**的,所以**改变默认产出**,必须 bump. 判据在 v8 注释里已写明:
-v8 不为选项 6/8/9 bump,理由是那些选项在**默认配置下恒假**(bump 属无谓重掷);
-规则 10 恒真,该理由不成立. 先例: v3(`gain_max_hp` 钉在 `obtained`)与 v4 都是
-同形改动并 bump 了.
+规则 10 是**无条件**的, 所以**改变默认产出**, 必须 bump. 判据在 v8 注释里已写明:
+v8 不为选项 6/8/9 bump, 理由是那些选项在**默认配置下恒假**(bump 属无谓重掷);
+规则 10 恒真, 该理由不成立. 先例: v3(`gain_max_hp` 钉在 `obtained`)与 v4 都是同形改动并 bump 了.
 
-**顺带核实了一个事实**: 生成的定义**不落盘** -- `AnthonyRelicRunRegistry` 是进程内
-`Dictionary` + `Queue`,由 `ResetForRunEnd` 清空,无任何序列化. 所以 bump 不是为了
-清掉磁盘上的旧数据,而是因为 `SeedVersion` 参与 RNG 流字符串,同种子的 v8 与 v9 是
-两次不同的抽取.
+**顺带核实**: 生成的定义**不落盘** -- `AnthonyRelicRunRegistry` 是进程内 `Dictionary` +
+`Queue`, 由 `ResetForRunEnd` 清空, 无序列化. 所以 bump 不是为了清磁盘旧数据, 而是因为
+`SeedVersion` 参与 RNG 流字符串, 同种子的 v8 与 v9 是两次不同的抽取.
 
-### v9 位移暴露了既有的被动档饱和缺陷 (真实缺陷)
+### v9 位移暴露的被动/增益档饱和 (真实缺陷)
 
-bump 后 `relic-probe` 的跨种子多样性断言失败: 2 条描述在 8/8 个种子中恒定
-(`extra_turn`, `modify_hand_draw -2`).
+bump 后跨种子多样性断言失败: 2 条描述在 8/8 种子中恒定(`extra_turn`, `modify_hand_draw -2`).
 
-**两个对照实验分离因果**:
-1. `SeedVersion` 改回 v8(保留规则 10) -> 全部 PASS
-2. 保持 v9、规则 10 短路为 `false` -> **仍然 FAIL**,同样两条
+**因果分离**: (1) 改回 v8 -> PASS; (2) 保持 v9 但规则 10 短路 -> **仍 FAIL**.
+故与规则 10 无关. 但"v8 绿 v9 红"不能证明有缺陷 -- 也可能是断言不稳健, 所以**先测量**:
 
-实验 2 证明与规则 10 无关. 根因: `PickPassives` 的 `?? PickEligiblePassive(...)` 兜底
-**忽略 `usedPassives`**,重发已用片段;而被动池只有 13 个片段、每局进入被动档 7-13 次,
-于是每局都把整池抽完. 与 v7 的限制类饱和同类.
+| 配置 | 200 种子最高频 | >=95% 的描述 |
+|---|---|---|
+| 带回退 | **196/200 = 98%** | **2** |
+| 去回退 | 121/200 = 60.5% | **0** |
 
-**修法**: 删掉重发牌,池耗尽时下落为触发型遗物(与增益档同形). **例外**: 仅当
-`WeightTriggeredCore <= 0` 时才重发 -- 因为"权重 0 关闭该档"是对玩家的承诺
-(工坊说明 + 探针都这么写),此时重复遗物是较轻的恶.
+决定性. 根因: 两档的 `?? PickEligiblePassive(..)` 兜底**忽略去重集合**, 重发已用片段.
+被动档 8 片段(6 限制 + **2 普通**, 均为 `modify_hand_draw/passive`), 增益档 5 片段
+(`extra_turn`/`modify_max_energy`/`retain_hand`/`enchant_reward`/`expand_card_pool`).
+被钉住的两条正是**每档各一条**. 两档片段数都远小于每局进入该档的次数.
 
-### 连带修正
+### 修法
 
-`relic-eligibility-probe` 被动档下限 8% -> 5%: 修复后被动档诚实地降到 6.04%
-(受内容容量限制: 8 个被动片段里只有 2 个普通被动,其余是受 30% 概率门的限制类,
-每局每片段最多一次). 已写明该下限测的是"该档不会变空"而非"钉住名义 15%".
+去掉两处回退, 耗尽时**下落**(增益 -> 被动 -> 触发). **例外**: 若下落目标档被玩家关掉
+(`WeightXxx <= 0`)则仍重发 -- "权重 0 关闭该档"是对玩家的承诺. 被动档守卫判
+`WeightTriggeredCore <= 0`; 增益档守卫判 `WeightPassiveCore <= 0 && WeightTriggeredCore <= 0`.
+
+**注意**: 初版只给被动档加了守卫, 增益档漏了 -> 存在"增益档开, 被动+触发都关"时
+仍产出触发型遗物的漏洞(正是上一轮 advisory 指出的). 已补齐并加**成对**零权重测试.
+
+### 顺带修正
+
+1. 断言换成**统计稳健**判据: 原取 8 种子交集要求为空, 而单条命中 8/8 概率约
+   `0.57^8 = 0.9%`, 60 条期望约 0.5 条 -- **靠运气**. 改为 200 种子 + 95% 普及率阈值,
+   并打印峰值(实测 60.5%, 余量充分).
+2. `relic-eligibility-probe` 被动档下限 8% -> 5%(修复后实测 6.04%, 受内容容量限制).
+3. 工坊说明"100/100/100/100 即默认 80/15/5"过时 -> 实测 **89.17/6.04/4.78**(200 种子
+   12000 槽位), 已改为"80/15/5 是名义比例 + 给出实测与原因".
+
+### 判别力验证
+
+增益档守卫短路为 `false` -> 重建 -> `triggered+passive` 用例 FAIL 并报出
+`benefit/passive/triggered = 400/0/4400`(被动档关闭后仍产出 4400 个触发型档位). 已还原.
 
 ### 全 mod 标题与介绍标注"测试中"
 
-用户指令: 在所有**玩法** mod 的介绍和标题中加"测试中". 判定依据是各 mod manifest 的
-`affects_gameplay`:
+依据各 mod manifest 的 `affects_gameplay`: AAR/Qurious/Spire1/MpConfigSync/Perfect/
+HeartShake/ChaosBridge 共 7 个标注; FastBoot 为 `false`(纯启动加速)**不标注**.
+标题追加 ` [测试中]`, 介绍在 `[h1]` 块后插入中英双语横幅.
 
-| 标注 | mod |
-|---|---|
-| 是 | AAR, Qurious, Spire1, MpConfigSync, Perfect, HeartShake, ChaosBridge |
-| 否 | FastBoot(`affects_gameplay: false`,纯启动加速) |
-
-- 标题: 追加 ` [测试中]`
-- 介绍: 在 `[h1]` 标题块之后插入一行中英双语横幅
-
-**踩坑**: VDF 值里用**真实换行**(合法),而我第一版序列化器把它转义成 `\n`,导致
-7 个文件全部 round-trip 不一致;改用最小侵入的单行正则替换(只动 title)与
-`[h1]` 后插入(只动 description),未触碰其余字节.
+**踩坑**: VDF 值里用**真实换行**(合法), 我第一版序列化器把它转义成 `\n`, 导致 7 个文件
+round-trip 全部不一致; 改用最小侵入的单行正则替换(只动 title)与 `[h1]` 后插入
+(只动 description), 未触碰其余字节.

@@ -709,6 +709,19 @@ public static class RelicGenerator
                 e => usedPassives.Add(e.ShapeKey),
                 e => !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e),
                 WeightOf);
+            // Exhausted: normally the slot falls through to the passive band
+            // below (and from there to the triggered path). That is only legal
+            // when a fallback band is actually switched ON. With BOTH
+            // WeightPassiveCore and WeightTriggeredCore at 0 there is nowhere
+            // legal to fall to, so re-serve a used benefit instead of emitting a
+            // relic from a band the player disabled - the same zero-weight
+            // contract the passive branch below honours.
+            if (benefit is null
+                && GenerationSettings.Current.WeightPassiveCore <= 0
+                && GenerationSettings.Current.WeightTriggeredCore <= 0)
+            {
+                benefit = PickEligiblePassive(random, pool.BenefitEffects);
+            }
             if (benefit is not null)
             {
                 usedPassives.Add(benefit.ShapeKey);
@@ -798,20 +811,12 @@ public static class RelicGenerator
             e => usedPassives.Add(e.ShapeKey),
             e => !e.IsRestriction && !usedPassives.Contains(e.ShapeKey) && !Excluded(null, e),
             WeightOf);
-        if (passive is null)
+        if (passive is null && GenerationSettings.Current.WeightTriggeredCore <= 0)
         {
-            // The pool is exhausted. Normally the slot falls through to the
-            // triggered path (see above), but ONLY if the player has left that
-            // band switched on: WeightTriggeredCore = 0 means "no triggered
-            // relics", and a zero weight must genuinely empty its band (the
-            // probe asserts it, and the Workshop page documents it). In that one
-            // case re-serve an already-used passive - a repeated relic is the
-            // lesser evil, and it is exactly what this branch did unconditionally
-            // before, which is what made every run draw the whole pool.
-            if (GenerationSettings.Current.WeightTriggeredCore <= 0)
-            {
-                passive = PickEligiblePassive(random, pool.PassiveEffects.Where(e => !e.IsRestriction).ToList());
-            }
+            // Exhausted, and the triggered band is switched OFF, so there is
+            // nowhere to fall through to. Re-serve a used passive: a repeated
+            // relic is the lesser evil against emitting one from a disabled band.
+            passive = PickEligiblePassive(random, pool.PassiveEffects.Where(e => !e.IsRestriction).ToList());
         }
         if (passive is not null)
         {
