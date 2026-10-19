@@ -6,6 +6,8 @@
 每局用本局种子确定性地生成 60 件遗物,替换本局的遗物奖励掉落.核心机制与原版东尼算法一致:[b]触发与效果是独立片段,生成时随机重组[/b],因此会出现原版从未有过的组合.
 [i]Each run deterministically generates 60 relics from the run seed and replaces the run's relic reward drops. Triggers and effects are independent fragments recombined at generation time, so combinations the base game never had can appear.[/i]
 
+[hr]
+
 [h2]它做什么 / What it does[/h2]
 
 [list]
