@@ -96,7 +96,11 @@
     </Target>
 
     <PropertyGroup>
-        <CopyToModsFolderOnBuild>true</CopyToModsFolderOnBuild>
+        <!-- opt-IN, not opt-out: this mod is retired (STATUS.md forbids building/deploying it).
+             The property used to be hard-coded true, so a plain `dotnet build` copied dll/pck/json
+             into E:\Slay the Spire 2\mods and contradicted deploy-target-hazard-2026-09-15.md
+             ("they never deploy unless asked"). Pass -p:CopyToModsFolderOnBuild=true to deploy. -->
+        <CopyToModsFolderOnBuild Condition="'$(CopyToModsFolderOnBuild)' == ''">false</CopyToModsFolderOnBuild>
     </PropertyGroup>
 
     <Target Name="CopyToModsFolder" AfterTargets="PostBuildEvent;PackPck" Condition="'$(CopyToModsFolderOnBuild)' == 'true' and Exists('$(ModsPath)')">
